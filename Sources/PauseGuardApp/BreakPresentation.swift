@@ -29,7 +29,54 @@ struct BreakBackdrop: View {
     }
 }
 
+/// The same immutable photo and logical coordinate space feed the backdrop and
+/// local frost. Sampling explicitly keeps previews and older systems faithful;
+/// it never samples the desktop or captures another window.
+struct BreakPanelBackdrop {
+    let image: CGImage?
+    let sceneSize: CGSize
+    let reduceVisualStimulation: Bool
+    static let coordinateSpace = "breakPhotoScene"
+}
+
+struct BreakPanelFrost: View {
+    let backdrop: BreakPanelBackdrop
+    let reduceTransparency: Bool
+    var body: some View {
+        GeometryReader { geometry in
+            if reduceTransparency {
+                Color(red: 0.09, green: 0.12, blue: 0.15)
+            } else {
+                let origin = geometry.frame(in: .named(BreakPanelBackdrop.coordinateSpace)).origin
+                BreakBackdrop(image: backdrop.image, reduceVisualStimulation: backdrop.reduceVisualStimulation)
+                    .frame(width: backdrop.sceneSize.width, height: backdrop.sceneSize.height)
+                    .blur(radius: 14, opaque: true)
+                    .offset(x: -origin.x, y: -origin.y)
+                    // Local text contrast, without losing the photo's colors.
+                    .overlay(Color.black.opacity(0.16))
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct BreakGlassEdge: ViewModifier {
+    let reduceTransparency: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(macOS 26.0, *), !reduceTransparency {
+            content.glassEffect(.clear, in: RoundedRectangle(cornerRadius: 24))
+        } else {
+            content.overlay {
+                RoundedRectangle(cornerRadius: 24).strokeBorder(.white.opacity(0.2), lineWidth: 1)
+            }
+        }
+    }
+}
+
 struct BreakInfoPanel<Actions: View>: View {
+    let backdrop: BreakPanelBackdrop
     let countdown: String
     let message: String
     let countdownSize: CGFloat
@@ -48,14 +95,14 @@ struct BreakInfoPanel<Actions: View>: View {
         .padding(28)
         .frame(maxWidth: 440)
         .background {
-            let shape = RoundedRectangle(cornerRadius: 24)
-            if reduceTransparency {
-                shape.fill(Color(red: 0.09, green: 0.12, blue: 0.15))
-            } else {
-                shape.fill(.regularMaterial).overlay { shape.fill(.black.opacity(0.22)) }
-            }
+            BreakPanelFrost(backdrop: backdrop, reduceTransparency: reduceTransparency)
+                .overlay {
+                    // Keep foreground text outside the native effect subtree:
+                    // ImageRenderer cannot draw that subtree on all systems.
+                    Color.clear.modifier(BreakGlassEdge(reduceTransparency: reduceTransparency))
+                        .allowsHitTesting(false).accessibilityHidden(true)
+                }
         }
-        .overlay { RoundedRectangle(cornerRadius: 24).strokeBorder(.white.opacity(0.2), lineWidth: 1) }
         .shadow(color: .black.opacity(0.22), radius: 20, y: 8)
     }
 }
@@ -73,7 +120,7 @@ struct BreakPreviewScene: View {
             let height = displaySize.height
             ZStack {
                 BreakBackdrop(image: image, reduceVisualStimulation: reduceVisualStimulation)
-                BreakInfoPanel(countdown: "01:00", message: "让目光看向远处，放松肩膀，起身活动。", countdownSize: min(100, max(44, width * 0.12))) {
+                BreakInfoPanel(backdrop: BreakPanelBackdrop(image: image, sceneSize: displaySize, reduceVisualStimulation: reduceVisualStimulation), countdown: "01:00", message: "让目光看向远处，放松肩膀，起身活动。", countdownSize: min(100, max(44, width * 0.12))) {
                     // Inert labels reserve representative action rows without
                     // nesting interactive controls inside a gallery card button.
                     if !strictMode {
@@ -87,6 +134,7 @@ struct BreakPreviewScene: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 32)
             }
+            .coordinateSpace(name: BreakPanelBackdrop.coordinateSpace)
             .frame(width: width, height: height)
             .scaleEffect(geometry.size.width / width, anchor: .topLeading)
         }

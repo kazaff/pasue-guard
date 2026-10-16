@@ -23,7 +23,7 @@ struct BreakView: View {
             ZStack {
                 BreakBackdrop(image: model.image, reduceVisualStimulation: model.reduceVisualStimulation)
                 ScrollView {
-                    BreakInfoPanel(countdown: countdown, message: model.message,
+                    BreakInfoPanel(backdrop: BreakPanelBackdrop(image: model.image, sceneSize: geometry.size, reduceVisualStimulation: model.reduceVisualStimulation), countdown: countdown, message: model.message,
                         countdownSize: min(100, max(44, geometry.size.width * 0.12))) {
                         if !model.runtime.cycleSettings.strictMode {
                             Button("结束本次休息") { onEvent(.endBreak) }
@@ -43,7 +43,8 @@ struct BreakView: View {
                     .padding(.vertical, max(32, geometry.safeAreaInsets.top + 16))
                     .frame(maxWidth: .infinity, minHeight: geometry.size.height)
                 }
-            }.foregroundStyle(.white)
+            }.coordinateSpace(name: BreakPanelBackdrop.coordinateSpace)
+                .foregroundStyle(.white)
         }
         // No animations, focus traps or keyboard monitors. System shortcuts and
         // VoiceOver keep their normal event path in both strict and relaxed modes.

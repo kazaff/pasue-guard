@@ -39,8 +39,9 @@ import PauseGuardPlatform
                     space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
                 output.draw(image, in: CGRect(x: 0, y: 0, width: 640, height: 320))
             }
-            // Local panel/text has red; untouched green fixture and its shadow have none.
-            let occupied = (0..<640).filter { bytes[(160 * 640 + $0) * 4] > 40 }
+            // The local frost dims green. Measure its extent independently of
+            // hue/gray material, so transparent glass preserves this scale oracle.
+            let occupied = (0..<640).filter { bytes[(160 * 640 + $0) * 4 + 1] < 225 }
             return try #require(occupied.last) - #require(occupied.first) + 1
         }
         let small = try panelWidth(displaySize: CGSize(width: 1280, height: 640))
