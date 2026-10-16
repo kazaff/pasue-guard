@@ -27,7 +27,7 @@ bash Scripts/check-app.sh
 - release `swift build` 通过；为避免覆盖正在运行的正常应用，未执行会写入 `dist` 的打包脚本。按其等价复制、生成 plist、ad hoc 签名步骤，将新包暂存到 `.build/visual-refresh/staged/PauseGuard.app`，并运行指向暂存路径的等价 `check-app.sh`，全部通过。确切命令与日志保存在 `.build/visual-refresh/{stage.sh,check-staged.sh,release-build.log,stage.log,check-staged.log}`。
 - 可选测试导出 `.build/visual-refresh/previews/` 的五模板与共享面板合成 PNG。这些使用人工生成的图片夹具和离屏 `ImageRenderer`，不能证明真实桌面 Material 模糊、覆盖窗口、VoiceOver 或多屏行为。没有调用原生 UI 自动化、终止正常实例、安装登录项或触发睡眠/注销。
 
-本实现阶段 `dist/PauseGuard.app` 保持原样；控制器将在确认用户已正常退出后重新打包替换，再人工验收新画面。仍待检查：明亮与复杂实拍图上的局部面板可读性、辅助功能“减少透明度”、减少视觉刺激、严格/非严格按钮与紧急解除、主显示器比例和多屏。
+实现阶段先保留了运行中的旧包。随后用户明确确认正常退出并授权替换；控制器只读确认应用和内置 Agent 进程均不存在，执行 `bash Scripts/build-app.sh` 与 `bash Scripts/check-app.sh`，均 exit 0，已将产品提交 `340ac83` 打包替换到 `dist/PauseGuard.app`。控制器再次运行全量测试，127 个报告项包含 1 项显式 HEIC 跳过，无失败。独立审查与预览比例修复复审均通过，日志见 `.build/visual-refresh/{controller-tests.log,dist-build.log,dist-check.log,review.md}`。尚未自动启动新版或执行真实覆盖。仍待检查：明亮与复杂实拍图上的局部面板可读性、辅助功能“减少透明度”、减少视觉刺激、严格/非严格按钮与紧急解除、主显示器比例和多屏。
 
 ## 上一次 MVP 完整运行（历史记录）
 

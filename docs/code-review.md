@@ -57,3 +57,10 @@ The implementer records fresh final verification of 122 reported tests in 17 sui
 **Spec + code-quality gate: PASS for this final fix batch; both original Important findings are addressed.** No remaining actionable finding was identified in the changed code. Ready to merge from code review: **Yes**.
 
 **Readiness: local candidate, not complete real-desktop MVP acceptance.** Automated/build/package evidence supports the candidate, but actual desktop/system acceptance remains pending exactly as documented. This review closes the code findings; it does not convert pending manual rows into passes.
+
+
+## 2026-10-16 草稿预览与视觉调整复审
+
+变更提交：`e830dd6`、`340ac83`。独立审查确认草稿预览隔离、取消机制、图片亮度、局部原生 Material、字体回退及原有休息安全路径；发现固定虚拟画布导致大屏预览面板比例失真。真实共享视图离屏回归先复现失败，随后改为采用显示器逻辑点尺寸；复审结论为 Spec PASS、Quality PASS，原 P2 已解决，无新增问题。预览窗同时适配可见桌面尺寸和滚动内容，静态操作行不触发计时事件。
+
+控制器复验：127 个测试报告项、18 suites、无失败，包含 1 项原有 HEIC 显式跳过；release 构建、dist 应用包结构及签名检查均通过。用户确认退出旧版后已替换 `dist/PauseGuard.app`。完整实现、审查和原始日志位于 `.build/visual-refresh/`。原生桌面毛玻璃观感、复杂照片可读性与辅助功能仍待实机确认，离屏图不能替代这些验收。
