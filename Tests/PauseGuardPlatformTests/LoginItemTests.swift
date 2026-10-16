@@ -1,0 +1,79 @@
+import Foundation
+import Testing
+@testable import PauseGuardPlatform
+
+struct LoginItemTests {
+    @Test func testPlistUsesStructuredArgumentsAndCurrentUserPaths() throws {
+        let home = URL(fileURLWithPath: "/tmp/home with space & quote'")
+        let app = URL(fileURLWithPath: "/Applications/休息 & Focus.app")
+        let manager = LoginItemManager(homeDirectory: home, runLaunchctl: { _ in })
+        let data = try manager.plistData(appURL: app)
+        let value = try #require(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        #expect(value["ProgramArguments"] as? [String] == ["/Applications/休息 & Focus.app/Contents/MacOS/PauseGuardAgent", "--app", "/Applications/休息 & Focus.app"])
+        #expect(manager.plistURL.path == "/tmp/home with space & quote'/Library/LaunchAgents/com.pauseguard.agent.plist")
+        #expect(value["RunAtLoad"] as? Bool == true)
+        let starter = try #require(PropertyListSerialization.propertyList(from: manager.plistData(appURL: app, loginStarter: true), format: nil) as? [String: Any])
+        #expect(starter["ProgramArguments"] as? [String] == ["/usr/bin/open", "-g", "/Applications/休息 & Focus.app"])
+        #expect(starter["KeepAlive"] as? Bool == false)
+    }
+    @Test func testInstallAndRemovalInTemporaryHome() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let app = home.appendingPathComponent("Test App.app")
+        let executable = app.appendingPathComponent("Contents/MacOS/PauseGuardAgent")
+        try FileManager.default.createDirectory(at: executable.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: executable)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+        let manager = LoginItemManager(homeDirectory: home, runLaunchctl: { _ in })
+        try manager.setEnabled(true, appURL: app)
+        #expect(FileManager.default.fileExists(atPath: manager.plistURL.path))
+        #expect(FileManager.default.fileExists(atPath: manager.loginPlistURL.path))
+        try manager.setEnabled(false, appURL: app)
+        #expect(!FileManager.default.fileExists(atPath: manager.plistURL.path))
+        #expect(!FileManager.default.fileExists(atPath: manager.loginPlistURL.path))
+    }
+    @Test func testSecondJobFailureRollsBackBothFilesAndLoadedGuardian() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let app = home.appendingPathComponent("Test.app")
+        let exe = app.appendingPathComponent("Contents/MacOS/PauseGuardAgent")
+        try FileManager.default.createDirectory(at: exe.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: exe)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: exe.path)
+        var calls: [[String]] = []
+        let manager = LoginItemManager(homeDirectory: home, runLaunchctl: { args in
+            calls.append(args)
+            if calls.count == 2 { throw CocoaError(.executableLoad) }
+        })
+        #expect(throws: (any Error).self) { try manager.setEnabled(true, appURL: app) }
+        #expect(!FileManager.default.fileExists(atPath: manager.plistURL.path))
+        #expect(!FileManager.default.fileExists(atPath: manager.loginPlistURL.path))
+        #expect(calls.last?.first == "bootout")
+        #expect(calls.last?.last?.hasSuffix("/com.pauseguard.agent") == true)
+    }
+    @Test func testUnloadedOneShotJobCanStillBeRemoved() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let manager = LoginItemManager(homeDirectory: home, runLaunchctl: { _ in
+            throw NSError(domain: "PauseGuard.LoginItem", code: 3)
+        })
+        try FileManager.default.createDirectory(at: manager.loginPlistURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: manager.loginPlistURL)
+        try manager.setEnabled(false, appURL: home.appendingPathComponent("Unused.app"))
+        #expect(!FileManager.default.fileExists(atPath: manager.loginPlistURL.path))
+    }
+    @Test func testFailureRollsBackNewInstallationAndRejectsNonBundle() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let manager = LoginItemManager(homeDirectory: home, runLaunchctl: { _ in throw CocoaError(.executableLoad) })
+        #expect(throws: (any Error).self) { try manager.plistData(appURL: home) }
+        let app = home.appendingPathComponent("Test.app")
+        let exe = app.appendingPathComponent("Contents/MacOS/PauseGuardAgent")
+        try FileManager.default.createDirectory(at: exe.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: exe)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: exe.path)
+        #expect(throws: (any Error).self) { try manager.setEnabled(true, appURL: app) }
+        #expect(!FileManager.default.fileExists(atPath: manager.plistURL.path))
+        #expect(!FileManager.default.fileExists(atPath: manager.loginPlistURL.path))
+    }
+}
