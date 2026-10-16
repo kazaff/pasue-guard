@@ -21,6 +21,45 @@ import PauseGuardPlatform
     private func contents(_ root: URL) throws -> [String: Data] {
         try Dictionary(uniqueKeysWithValues: FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil).map { ($0.lastPathComponent, try Data(contentsOf: $0)) })
     }
+    // Catches using a fixed virtual width: doubling logical display points must
+    // halve the panel/photo ratio when both complete scenes are fitted to a card.
+    @Test func previewPanelScaleMatchesLogicalDisplaySize() throws {
+        let context = try #require(CGContext(data: nil, width: 40, height: 20, bitsPerComponent: 8, bytesPerRow: 160,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(CGColor(red: 0, green: 1, blue: 0, alpha: 1)); context.fill(CGRect(x: 0, y: 0, width: 40, height: 20))
+        let source = try #require(context.makeImage())
+        func panelWidth(displaySize: CGSize) throws -> Int {
+            let scene = BreakPreviewScene(image: source, displaySize: displaySize,
+                reduceVisualStimulation: false)
+                .frame(width: 640, height: 320)
+            let image = try #require(ImageRenderer(content: scene).cgImage)
+            var bytes = [UInt8](repeating: 0, count: 640 * 320 * 4)
+            bytes.withUnsafeMutableBytes { buffer in
+                let output = CGContext(data: buffer.baseAddress, width: 640, height: 320, bitsPerComponent: 8, bytesPerRow: 2560,
+                    space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                output.draw(image, in: CGRect(x: 0, y: 0, width: 640, height: 320))
+            }
+            // Local panel/text has red; untouched green fixture and its shadow have none.
+            let occupied = (0..<640).filter { bytes[(160 * 640 + $0) * 4] > 40 }
+            return try #require(occupied.last) - #require(occupied.first) + 1
+        }
+        let small = try panelWidth(displaySize: CGSize(width: 1280, height: 640))
+        let large = try panelWidth(displaySize: CGSize(width: 2560, height: 1280))
+        #expect(small > 100)
+        #expect(Double(large) / Double(small) > 0.4)
+        #expect(Double(large) / Double(small) < 0.6)
+    }
+    @Test func galleryFitsSmallVisibleDesktopAndKeepsLogicalSceneDimensions() {
+        let display = PreviewDisplayGeometry(screenSize: CGSize(width: 2560, height: 1440), visibleSize: CGSize(width: 800, height: 600))
+        #expect(display.sceneSize == CGSize(width: 2560, height: 1440))
+        #expect(display.gallerySize.width <= 800 && display.gallerySize.height <= 600)
+        #expect(display.gallerySize.width > 600 && display.gallerySize.height > 400)
+        let other = PreviewDisplayGeometry(screenSize: CGSize(width: 1280, height: 720), visibleSize: CGSize(width: 800, height: 600))
+        #expect(display != other, "Same aspect ratio still needs distinct logical display geometry")
+        let fallback = PreviewDisplayGeometry(screenSize: nil, visibleSize: nil)
+        #expect(fallback.sceneSize.width / fallback.sceneSize.height == 16.0 / 9)
+        #expect(fallback.gallerySize.width <= 800 && fallback.gallerySize.height <= 600)
+    }
     // Catches previews accidentally reading saved themes, choosing unrelated photos, or changing the prepared break.
     @Test func draftGalleryUsesOnlyDraftPhotosAndLeavesLibraryAndPreparedBreakUntouched() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -50,7 +89,7 @@ import PauseGuardPlatform
         if let folder = ProcessInfo.processInfo.environment["PAUSEGUARD_PREVIEW_DIR"] {
             try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
             for preview in gallery {
-                let scene = BreakPreviewScene(image: preview.image, aspectRatio: 2, reduceVisualStimulation: false)
+                let scene = BreakPreviewScene(image: preview.image, displaySize: CGSize(width: 2560, height: 1280), reduceVisualStimulation: false)
                     .frame(width: 960, height: 480)
                 let image = try #require(ImageRenderer(content: scene).cgImage)
                 let url = URL(fileURLWithPath: folder).appendingPathComponent("panel-\(preview.layout.rawValue).png")

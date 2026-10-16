@@ -60,25 +60,37 @@ struct BreakInfoPanel<Actions: View>: View {
     }
 }
 
-/// Render the same presentation at a virtual display size, then scale the complete
+/// Render at the actual display logical point size, then scale the complete
 /// scene into a card. No live model, actions, windows, or timer are involved.
 struct BreakPreviewScene: View {
     let image: CGImage
-    let aspectRatio: Double
+    let displaySize: CGSize
     let reduceVisualStimulation: Bool
+    var strictMode = false
     var body: some View {
         GeometryReader { geometry in
-            let width: CGFloat = 1280
-            let height = width / aspectRatio
+            let width = displaySize.width
+            let height = displaySize.height
             ZStack {
                 BreakBackdrop(image: image, reduceVisualStimulation: reduceVisualStimulation)
-                BreakInfoPanel(countdown: "01:00", message: "让目光看向远处，放松肩膀，起身活动。", countdownSize: 100) { EmptyView() }
-                    .padding(32)
+                BreakInfoPanel(countdown: "01:00", message: "让目光看向远处，放松肩膀，起身活动。", countdownSize: min(100, max(44, width * 0.12))) {
+                    // Inert labels reserve representative action rows without
+                    // nesting interactive controls inside a gallery card button.
+                    if !strictMode {
+                        Text("结束本次休息").padding(.horizontal, 16).padding(.vertical, 8)
+                            .background(.tint, in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    Text("紧急解除…").padding(.horizontal, 16).padding(.vertical, 8)
+                        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                        .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.white.opacity(0.2)) }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 32)
             }
             .frame(width: width, height: height)
             .scaleEffect(geometry.size.width / width, anchor: .topLeading)
         }
-        .aspectRatio(aspectRatio, contentMode: .fit)
+        .aspectRatio(displaySize.width / displaySize.height, contentMode: .fit)
         .clipped()
         .preferredColorScheme(.dark)
         .accessibilityElement(children: .ignore)
