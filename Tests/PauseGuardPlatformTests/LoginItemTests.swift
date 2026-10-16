@@ -24,8 +24,15 @@ struct LoginItemTests {
         try FileManager.default.createDirectory(at: executable.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("fixture".utf8).write(to: executable)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+        let history = AgentHistoryStore(directory: home.appendingPathComponent("Library/Application Support/PauseGuard"))
+        var exhausted = AgentRecoveryPolicy()
+        let session = AgentRecoveryTests().saved()
+        for _ in 0..<3 { _ = exhausted.decision(session: session, appRunning: false, now: Date()) }
+        try history.save(exhausted)
         let manager = LoginItemManager(homeDirectory: home, runLaunchctl: { _ in })
         try manager.setEnabled(true, appURL: app)
+        var reset = history.load()
+        #expect(reset.decision(session: session, appRunning: false, now: Date()) == .relaunch)
         #expect(FileManager.default.fileExists(atPath: manager.plistURL.path))
         #expect(FileManager.default.fileExists(atPath: manager.loginPlistURL.path))
         try manager.setEnabled(false, appURL: app)
@@ -40,6 +47,11 @@ struct LoginItemTests {
         try FileManager.default.createDirectory(at: exe.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data().write(to: exe)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: exe.path)
+        let history = AgentHistoryStore(directory: home.appendingPathComponent("Library/Application Support/PauseGuard"))
+        var exhausted = AgentRecoveryPolicy()
+        let session = AgentRecoveryTests().saved()
+        for _ in 0..<3 { _ = exhausted.decision(session: session, appRunning: false, now: Date()) }
+        try history.save(exhausted)
         var calls: [[String]] = []
         let manager = LoginItemManager(homeDirectory: home, runLaunchctl: { args in
             calls.append(args)
@@ -48,6 +60,8 @@ struct LoginItemTests {
         #expect(throws: (any Error).self) { try manager.setEnabled(true, appURL: app) }
         #expect(!FileManager.default.fileExists(atPath: manager.plistURL.path))
         #expect(!FileManager.default.fileExists(atPath: manager.loginPlistURL.path))
+        var unchanged = history.load()
+        #expect(unchanged.decision(session: session, appRunning: false, now: Date().addingTimeInterval(86400)) == .stopRetrying)
         #expect(calls.last?.first == "bootout")
         #expect(calls.last?.last?.hasSuffix("/com.pauseguard.agent") == true)
     }

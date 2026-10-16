@@ -43,16 +43,13 @@ import PauseGuardPlatform
         defer { close(lock) }
         guard flock(lock, LOCK_EX | LOCK_NB) == 0 else { return }
         let history = AgentHistoryStore(directory: directory)
-        var policy = history.load()
         while !Task.isCancelled {
             let running = NSWorkspace.shared.runningApplications.contains {
                 $0.bundleIdentifier == "com.pauseguard.app" || $0.bundleURL?.resolvingSymlinksInPath() == app
             }
-            let decision = policy.decision(session: StateStore(directory: directory).loadSession(), appRunning: running, now: Date())
-            if decision == .relaunch {
-                do {
-                    // Charge the attempt durably before launching; a crash cannot reset its budget.
-                    try history.save(policy)
+            do {
+                let decision = try history.decision(session: StateStore(directory: directory).loadSession(), appRunning: running, now: Date())
+                if decision == .relaunch {
                     // Recheck explicit exit and liveness at the last boundary before launch.
                     if StateStore(directory: directory).loadSession()?.desiredRunning == true,
                        !NSWorkspace.shared.runningApplications.contains(where: { $0.bundleIdentifier == "com.pauseguard.app" }) {
@@ -60,8 +57,8 @@ import PauseGuardPlatform
                         configuration.activates = false
                         _ = try await NSWorkspace.shared.openApplication(at: app, configuration: configuration)
                     }
-                } catch { fputs("PauseGuard recovery: \(error.localizedDescription)\n", stderr) }
-            }
+                }
+            } catch { fputs("PauseGuard recovery: \(error.localizedDescription)\n", stderr) }
             try? await Task.sleep(for: .seconds(10))
         }
     }

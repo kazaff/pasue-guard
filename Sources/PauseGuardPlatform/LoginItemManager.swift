@@ -59,6 +59,7 @@ public struct LoginItemManager {
                 for (label, url) in jobs {
                     try runLaunchctl(["bootstrap", domain, url.path]); loaded.append(label)
                 }
+                try AgentHistoryStore(directory: homeDirectory.appendingPathComponent("Library/Application Support/PauseGuard")).resetAfterExplicitEnable()
             } catch {
                 // Preserve any job whose rollback fails so users can retry disabling it.
                 var retained = Set<String>()

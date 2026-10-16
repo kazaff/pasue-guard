@@ -105,3 +105,101 @@ func testHEICImportWhenEncoderAvailable() throws {
     let decoded = try #require(CGImageSourceCreateImageAtIndex(thumbnail, 0, nil))
     #expect(decoded.width == 80 && decoded.height == 120)
 }
+
+@Test(arguments: [Data("broken metadata".utf8), Data(#"{"version":999,"assets":[],"themes":[],"hashes":[]}"#.utf8)])
+func testDamagedMetadataRecoversOnlyOnExplicitMutation(bytes: Data) throws {
+    let root = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: root) }
+    let source = try fixture(root)
+    let directory = root.appendingPathComponent("library")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let metadata = directory.appendingPathComponent("library.json")
+    try bytes.write(to: metadata)
+    let original = directory.appendingPathComponent("old-original.png")
+    let thumbnail = directory.appendingPathComponent("old-thumb.png")
+    try Data("original".utf8).write(to: original)
+    try Data("thumbnail".utf8).write(to: thumbnail)
+    let library = try AssetLibrary(rootURL: directory)
+    #expect(library.assets.isEmpty && library.themes.isEmpty)
+    #expect(try Data(contentsOf: metadata) == bytes)
+    #expect(try library.importImages([root.appendingPathComponent("missing.png")]).isEmpty)
+    #expect(try Data(contentsOf: metadata) == bytes)
+    let imported = try #require(library.importImages([source]).first)
+    try library.saveThemes([BreakTheme(name: "Recovered", imageIDs: [imported.id])])
+    let reloaded = try AssetLibrary(rootURL: directory)
+    #expect(reloaded.assets == [imported])
+    #expect(reloaded.themes.first?.name == "Recovered")
+    #expect(reloaded.themes.first?.imageIDs == [imported.id])
+    let backups = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil).filter { $0.lastPathComponent.hasPrefix("library.json.preserved-") }
+    #expect(backups.count == 1)
+    #expect(try Data(contentsOf: #require(backups.first)) == bytes)
+    #expect(try Data(contentsOf: original) == Data("original".utf8))
+    #expect(try Data(contentsOf: thumbnail) == Data("thumbnail".utf8))
+}
+
+@Test func testLibraryFilesystemFailuresRemainErrors() throws {
+    let root = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: root) }
+    let directory = root.appendingPathComponent("library")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let metadata = directory.appendingPathComponent("library.json")
+    try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
+    #expect(throws: (any Error).self) { try AssetLibrary(rootURL: directory) }
+    try FileManager.default.removeItem(at: metadata)
+    let library = try AssetLibrary(rootURL: directory)
+    try FileManager.default.removeItem(at: directory)
+    try Data("storage is a file".utf8).write(to: directory)
+    #expect(throws: (any Error).self) { try library.saveThemes([BreakTheme(name: "No write", imageIDs: [])]) }
+    #expect(library.themes.isEmpty)
+}
+
+@Test func testThemeFirstRecoveryPreservesMetadataBeforeWriting() throws {
+    let root = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: root) }
+    let metadata = root.appendingPathComponent("library.json")
+    let damaged = Data("damaged".utf8)
+    try damaged.write(to: metadata)
+    let library = try AssetLibrary(rootURL: root)
+    try library.saveThemes([BreakTheme(name: "Fresh theme", imageIDs: [])])
+    #expect(try AssetLibrary(rootURL: root).themes.first?.name == "Fresh theme")
+    let backup = try #require(FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil).first { $0.lastPathComponent.hasPrefix("library.json.preserved-") })
+    #expect(try Data(contentsOf: backup) == damaged)
+    let second = Data("damaged again".utf8)
+    try second.write(to: metadata)
+    try AssetLibrary(rootURL: root).saveThemes([BreakTheme(name: "Second recovery", imageIDs: [])])
+    let backups = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil).filter { $0.lastPathComponent.hasPrefix("library.json.preserved-") }
+    #expect(backups.count == 2)
+    #expect(try backups.map { try Data(contentsOf: $0) }.contains(second))
+    #expect(try Data(contentsOf: backup) == damaged)
+}
+
+@Test func testUnwritableCorruptMetadataCannotBeSilentlyReplaced() throws {
+    let root = try temporaryDirectory(); defer {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
+        try? FileManager.default.removeItem(at: root)
+    }
+    let metadata = root.appendingPathComponent("library.json")
+    let bytes = Data("broken".utf8)
+    try bytes.write(to: metadata)
+    let library = try AssetLibrary(rootURL: root)
+    try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: root.path)
+    #expect(throws: (any Error).self) { try library.saveThemes([BreakTheme(name: "Denied", imageIDs: [])]) }
+    #expect(try Data(contentsOf: metadata) == bytes)
+    #expect(library.themes.isEmpty)
+}
+
+@Test func testUnreadableMetadataDoesNotBecomeAnEmptyLibrary() throws {
+    let root = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: root) }
+    let metadata = root.appendingPathComponent("library.json")
+    try Data("broken".utf8).write(to: metadata)
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: metadata.path)
+    defer { try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: metadata.path) }
+    #expect(throws: (any Error).self) { try AssetLibrary(rootURL: root) }
+}
+
+@Test func testInaccessibleLibraryDirectoryCannotMasqueradeAsMissingMetadata() throws {
+    let root = try temporaryDirectory(); defer {
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
+        try? FileManager.default.removeItem(at: root)
+    }
+    try Data("broken".utf8).write(to: root.appendingPathComponent("library.json"))
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: root.path)
+    #expect(throws: (any Error).self) { try AssetLibrary(rootURL: root) }
+}

@@ -38,11 +38,11 @@ open -n dist/PauseGuard.app --args --demo
 
 在“休息背景”批量导入 PNG、JPEG、HEIC，选择单图或拼贴；在“主题图集”管理名称、启用状态和素材集合。支持 Hero、Grid、Collage、Cinematic、Minimal 和随机模板。HEIC 真实文件解码尚待验证。图片复制到内部库，源文件可保留在原位置；合成失败使用默认背景，不等待合成才进入休息。
 
-数据目录为 `~/Library/Application Support/PauseGuard/`：`settings.json` 保存计时配置，`preferences.json` 保存界面偏好，`session.json` 保存运行快照，`Images/` 保存素材、缩略图与 `library.json`，`events.log` 保存有界事件日志，`agent-history.json` 保存恢复限速记录。损坏状态不会直接恢复覆盖；配置/状态在显式替换保存时保留 `.preserved-*` 诊断副本。数据和图片仅在本机使用，不需账号。
+数据目录为 `~/Library/Application Support/PauseGuard/`：`settings.json` 保存计时配置，`preferences.json` 保存界面偏好，`session.json` 保存运行快照，`Images/` 保存素材、缩略图与 `library.json`，`events.log` 保存有界事件日志，`agent-history.json` 保存独立的恢复次数与耗尽记录。损坏状态不会直接恢复覆盖；配置/状态在显式替换保存时保留 `.preserved-*` 诊断副本。图片库元数据损坏或版本过新时先使用空库；下一次明确导入有效图片或保存主题时，把原 `library.json` 移到唯一的 `library.json.preserved-*`，再保存新库，保留旧原图和缩略图。实际磁盘读写失败仍报错，不当作空库恢复。数据和图片仅在本机使用，不需账号。
 
 ## 开机启动与 Agent
 
-设置中的开机启动开关会安装或移除当前用户的两个任务：`com.pauseguard.login` 在登录时打开应用，`com.pauseguard.agent` 检查异常消失并有限恢复。正常退出保存停止意图，当前会话中不会由守护程序重新拉起。系统注销/重启则保留未完成快照和恢复意图，下一次打开时继续（真实系统事件投递仍待验收）。Agent 最多在五分钟内尝试三次；它不拥有覆盖窗口。
+设置中的开机启动开关会安装或移除当前用户的两个任务：`com.pauseguard.login` 在登录时打开应用，`com.pauseguard.agent` 检查异常消失并有限恢复。正常退出保存停止意图，当前会话中不会由守护程序重新拉起。系统注销/重启则保留未完成快照和恢复意图，下一次打开时继续（真实系统事件投递仍待验收）。Agent 每次明确启用后最多自动尝试三次；预算耗尽后持续停止，即使超过五分钟或 Agent 重启也不恢复次数，短暂出现进程亦不重置。只有成功重新启用开机启动（关闭再打开，或移除后重新安装）才重置预算；单独手动打开应用不会重置。旧版、损坏或未知版本的恢复记录也先停止，明确重新启用时保留诊断副本再重置。它不拥有覆盖窗口。
 
 需要手动管理时，在已登录用户下执行（无需 sudo；先构建并保持应用路径稳定）：
 

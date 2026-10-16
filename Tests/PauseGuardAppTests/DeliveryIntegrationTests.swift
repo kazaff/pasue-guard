@@ -1,5 +1,8 @@
 import Foundation
 import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
+import PauseGuardImages
 import Testing
 import PauseGuardCore
 import PauseGuardPlatform
@@ -120,6 +123,33 @@ import PauseGuardPlatform
         #expect(reopened.runtime.phase == .breaking)
         #expect(reopened.runtime.breakRemainingSeconds == 270)
         reopened.shutdown()
+    }
+
+    @Test(arguments: ["broken", #"{"version":999,"assets":[],"themes":[],"hashes":[]}"#])
+    func damagedMetadataStillAllowsProviderImportAndThemeManagement(metadata: String) async throws {
+        let root = directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let library = root.appendingPathComponent("Images")
+        try FileManager.default.createDirectory(at: library, withIntermediateDirectories: true)
+        let bytes = Data(metadata.utf8)
+        try bytes.write(to: library.appendingPathComponent("library.json"))
+        let provider = ImageBackgroundProvider(libraryURL: library)
+        #expect(try await provider.librarySnapshot().assets.isEmpty)
+        let context = try #require(CGContext(data: nil, width: 2, height: 2, bitsPerComponent: 8, bytesPerRow: 8,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let source = root.appendingPathComponent("fresh.png")
+        let destination = try #require(CGImageDestinationCreateWithURL(source as CFURL, UTType.png.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, try #require(context.makeImage()), nil)
+        #expect(CGImageDestinationFinalize(destination))
+        let imported = try await provider.importImages([source])
+        let image = try #require(imported.first)
+        try await provider.saveThemes([BreakTheme(name: "New theme", imageIDs: [image.id])])
+        let reopened = ImageBackgroundProvider(libraryURL: library)
+        let snapshot = try await reopened.librarySnapshot()
+        #expect(snapshot.assets == [image])
+        #expect(snapshot.themes.first?.name == "New theme")
+        #expect(snapshot.themes.first?.imageIDs == [image.id])
+        let evidence = try #require(FileManager.default.contentsOfDirectory(at: library, includingPropertiesForKeys: nil).first { $0.lastPathComponent.hasPrefix("library.json.preserved-") })
+        #expect(try Data(contentsOf: evidence) == bytes)
     }
 
 }

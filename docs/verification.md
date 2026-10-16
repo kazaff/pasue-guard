@@ -1,6 +1,6 @@
 # 本地验证记录
 
-日期：2026-10-16；以下时间均为 **Asia/Taipei（UTC+08:00）**。基线提交 `94fb40b`；本轮包含集成测试、系统结束会话意图修复及交付文档。独立最终代码审查由控制器另行执行，本记录不替代其结果。
+日期：2026-10-16；以下时间均为 **Asia/Taipei（UTC+08:00）**。最终修复基线提交 `e107abe`；本轮修复守护重试耗尽持久化及图片库元数据恢复。早前系统结束会话修复的证据保留于下文。独立最终代码审查由控制器另行执行，本记录不替代其结果。
 
 ## 环境与复现
 
@@ -23,22 +23,31 @@ bash Scripts/check-app.sh
 
 | 命令 | 开始 | 结束 | 实际结果 |
 |---|---|---|---|
-| `bash Scripts/test.sh` | 11:19:19 | 11:19:23 | exit 0；报告 111 tests、16 suites，0 失败；其中 1 项 HEIC 编码器用例显式跳过 |
-| `bash Scripts/build-app.sh` | 11:19:23 | 11:19:31 | exit 0；release 构建通过，两个程序及三份 plist 打包通过，ad hoc 签名校验通过 |
-| `bash Scripts/check-app.sh` | 11:19:31 | 11:19:31 | exit 0；bundle smoke checks passed；demo 安装/脚本选项拒绝检查通过 |
+| `bash Scripts/test.sh` | 13:37:27 | 13:37:31 | exit 0；报告 122 tests、17 suites，0 失败；其中 1 项 HEIC 编码器用例显式跳过 |
+| `bash Scripts/build-app.sh` | 13:37:31 | 13:37:39 | exit 0；release 构建通过，两个程序及三份 plist 打包通过，ad hoc 签名校验通过 |
+| `bash Scripts/check-app.sh` | 13:37:39 | 13:37:40 | exit 0；bundle smoke checks passed；demo 安装/脚本选项拒绝检查通过 |
 
 关键输出：
 
 ```text
 Test testHEICImportWhenEncoderAvailable() skipped:
   "Requires a working local HEIC encoder; opt in with PAUSEGUARD_TEST_HEIC_ENCODER=1"
-Test run with 111 tests in 16 suites passed after 0.723 seconds.
+Test run with 122 tests in 17 suites passed after 0.420 seconds.
 Bundle smoke checks passed: ./dist/PauseGuard.app
 ```
 
-测试总数是测试运行器报告数，包含显式跳过项；不能据此宣称 111 项实际执行，也不能宣称 HEIC 实文件已验证。应用路径为 `dist/PauseGuard.app`，为本机 arm64 输出；本地 ad hoc 签名不等于 Developer ID 签名、公证或其他机器 Gatekeeper 安装通过。
+测试总数是测试运行器报告数，包含显式跳过项；不能据此宣称 122 项实际执行，也不能宣称 HEIC 实文件已验证。应用路径为 `dist/PauseGuard.app`，为本机 arm64 输出；本地 ad hoc 签名不等于 Developer ID 签名、公证或其他机器 Gatekeeper 安装通过。
 
-## 集成与 RED/GREEN
+## 最终审查修复与 RED/GREEN
+
+- 守护策略：先复现超过 300 秒及 Agent 重启后重新拉起的断言失败；改为每次明确启用后总计最多三次，耗尽持续停止。短暂存活、时间回退/前进和 Agent 重启均不清除预算。独立 v2 历史在返回 relaunch 前持久记账，进入 stopRetrying 时保存耗尽标记；轮询与明确启用重置使用同一文件锁，避免旧内存状态覆盖重置。旧版/损坏/未来历史先停止，明确重新启用时保留诊断副本。
+- 成功启用登录项才重置：安装测试先出现预期 RED；关闭再打开或移除后重新安装会清除预算，两任务安装失败不清除。没有运行真实 launchctl；测试只替换系统调用，保留真实临时文件与策略。
+- 图片库：损坏和未来元数据用例先分别出现解码/版本错误；改为只读时空库，显式有效导入或主题保存时唯一 `.preserved-*` 备份，再保存新库。证明旧元数据、原图、缩略图保留；连续恢复使用不同副本。后台 provider 跨 actor 导入/主题管理/重新加载也通过。
+- 真实存储失败：无读取权限、无法写入、目录被文件替代仍报错；额外 RED 证明 `fileExists` 会把无访问权限目录误当缺失，改为直接读取并仅捕获真正的不存在错误，针对回归后通过。
+
+新测试共增加 11 个报告项（含两个参数化用例；每个参数化测试只计一个报告项）。完整日志、RED 记录、API 与自审见仓库本地 `.superpowers/sdd/2026-10-16-pauseguard-mvp/final-fixes-report.md` 和 `final-fixes-logs/`。这不包含 GUI 或系统实机验收。
+
+## 早前交付阶段集成与 RED/GREEN
 
 新增 `Tests/PauseGuardAppTests/DeliveryIntegrationTests.swift` 四个场景：
 

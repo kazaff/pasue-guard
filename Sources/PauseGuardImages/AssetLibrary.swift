@@ -11,6 +11,7 @@ public final class AssetLibrary {
     public let rootURL: URL
     public private(set) var assets: [ImageAsset] = []
     public private(set) var themes: [BreakTheme] = []
+    private var metadataNeedsPreservation = false
     private var hashes: [UUID: String] = [:]
     private static let defaultThemeID = UUID(uuidString: "A98244DD-C312-4EC4-AB5B-95EE06E53601")!
     private struct Metadata: Codable {
@@ -23,13 +24,18 @@ public final class AssetLibrary {
         self.rootURL = rootURL
         try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
         let metadataURL = rootURL.appendingPathComponent("library.json")
-        if FileManager.default.fileExists(atPath: metadataURL.path) {
-            let stored = try JSONDecoder().decode(Metadata.self, from: Data(contentsOf: metadataURL))
-            guard stored.version == 1 else { throw ImageLibraryError.unsupportedMetadataVersion }
-            assets = stored.assets.filter { ImageDecoding.isLocalName($0.fileName) && ImageDecoding.isLocalName($0.thumbnailName) && $0.width > 0 && $0.height > 0 }
-            hashes = stored.hashes
-            themes = normalized(stored.themes)
+        // Read directly: fileExists also returns false for inaccessible paths.
+        let data: Data
+        do { data = try Data(contentsOf: metadataURL) }
+        catch let error as CocoaError where error.code == .fileReadNoSuchFile { return }
+        // Only decoding/version failures fall back. Filesystem errors stay actionable.
+        guard let stored = try? JSONDecoder().decode(Metadata.self, from: data), stored.version == 1 else {
+            metadataNeedsPreservation = true
+            return
         }
+        assets = stored.assets.filter { ImageDecoding.isLocalName($0.fileName) && ImageDecoding.isLocalName($0.thumbnailName) && $0.width > 0 && $0.height > 0 }
+        hashes = stored.hashes
+        themes = normalized(stored.themes)
     }
     /// Invalid, oversized, unsupported, or unreadable items are skipped independently.
     /// Metadata/storage errors throw; successful earlier items in the batch are persisted.
@@ -97,7 +103,16 @@ public final class AssetLibrary {
     }
     private func persist() throws {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(Metadata(assets: assets, themes: themes, hashes: hashes)).write(to: rootURL.appendingPathComponent("library.json"), options: .atomic)
+        let data = try encoder.encode(Metadata(assets: assets, themes: themes, hashes: hashes))
+        let url = rootURL.appendingPathComponent("library.json")
+        if metadataNeedsPreservation {
+            // A unique same-directory move keeps the original bytes even if replacement fails.
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            guard attributes[.type] as? FileAttributeType == .typeRegular else { throw CocoaError(.fileWriteInvalidFileName) }
+            try FileManager.default.moveItem(at: url, to: rootURL.appendingPathComponent("library.json.preserved-" + UUID().uuidString))
+            metadataNeedsPreservation = false
+        }
+        try data.write(to: url, options: .atomic)
     }
     private func prepare(_ url: URL) throws -> (hash: String, extensionName: String, width: Int, height: Int, thumbnail: CGImage) {
         let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
