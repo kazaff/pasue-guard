@@ -96,3 +96,5 @@ Bundle smoke checks passed: ./dist/PauseGuard.app
 - `.build/glass-backdrop/previews/striped-{red-blue,blue-red}.png` 是人工图像夹具的离屏输出，证明照片颜色、空间关系、局部模糊和独立文字绘制，**不证明原生 Liquid Glass 的实时折射、高光或实际桌面效果**。真实照片上的可读性、macOS 14/15 实机、macOS 26 原生玻璃、辅助功能开关、多屏、滚动及紧急解除仍待人工验收。
 
 独立复审发现极亮照片上的白字对比不足，补充 1 点深色前景细阴影，覆盖同一面板内的倒计时、文案与内联紧急解除控件，保持照片层 16% 局部压暗不变。纯白照片回归先以 0% 字形边缘具有足够深色轮廓失败；修复后要求超过 85% 的白字边缘在 3 像素范围内具有 sRGB 小于 140 的轮廓（对白色超过 3:1）。最终离屏纯白照片 PNG 已目视检查，最终全量为 134 个报告项、19 suites，无失败，包含 1 项原有 HEIC 跳过；原生实时玻璃效果仍待人工验收。
+
+主视觉渐变 `cb96693` 与玻璃修复 `34d764c`、亮图文字修复 `624de20` 均完成独立审查，最终无待修复代码问题。用户明确回复已正常退出并授权替换，控制器用进程检查确认应用与 Agent 均未运行后，执行 `Scripts/build-app.sh` 和 `Scripts/check-app.sh`，均通过，已更新 `dist/PauseGuard.app`。构建、签名及包检查日志为 `.build/glass-backdrop/dist-build.log` 与 `dist-check.log`；没有自动启动应用或触发真实休息覆盖。
