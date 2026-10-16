@@ -40,10 +40,24 @@ public enum Compositor {
         }
         switch selection.layoutMode {
         case .hero, .random:
-            draw(0, bounds, blur: 14)
-            draw(0, CGRect(x: 0, y: 0, width: w * 0.73, height: h))
-            if assets.count > 1 { draw(1, CGRect(x: w * 0.73, y: 0, width: w * 0.27, height: h), blur: 3) }
-            linearShade(context, start: CGPoint(x: w * 0.6, y: 0), end: CGPoint(x: w * 0.82, y: 0), alpha: 0.08)
+            // An opaque primary also provides a seamless single/missing-auxiliary fallback.
+            draw(0, bounds)
+            if assets.count > 1,
+               let feather = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                   colors: [CGColor(gray: 1, alpha: 0), CGColor(gray: 1, alpha: 1)] as CFArray,
+                   locations: [0, 1]) {
+                let start = w * 0.64, end = w * 0.82
+                context.saveGState()
+                context.clip(to: CGRect(x: start, y: 0, width: w - start, height: h))
+                context.beginTransparencyLayer(auxiliaryInfo: nil)
+                draw(1, CGRect(x: start, y: 0, width: w - start, height: h), blur: 3)
+                // Mask only the auxiliary layer, so the overlap mixes photo colors without a dark wash.
+                context.setBlendMode(.destinationIn)
+                context.drawLinearGradient(feather, start: CGPoint(x: start, y: 0), end: CGPoint(x: end, y: 0),
+                    options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+                context.endTransparencyLayer()
+                context.restoreGState()
+            }
         case .grid:
             let gap = max(2, min(w, h) * 0.018)
             for index in 0..<4 {
@@ -104,10 +118,5 @@ public enum Compositor {
         return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: row,
             space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
             provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
-    }
-    private static func linearShade(_ context: CGContext, start: CGPoint, end: CGPoint, alpha: CGFloat) {
-        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [CGColor(gray: 0, alpha: 0), CGColor(gray: 0, alpha: alpha), CGColor(gray: 0, alpha: 0)] as CFArray, locations: [0, 0.5, 1]) {
-            context.drawLinearGradient(gradient, start: start, end: end, options: [])
-        }
     }
 }

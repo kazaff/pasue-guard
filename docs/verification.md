@@ -29,6 +29,13 @@ bash Scripts/check-app.sh
 
 实现阶段先保留了运行中的旧包。随后用户明确确认正常退出并授权替换；控制器只读确认应用和内置 Agent 进程均不存在，执行 `bash Scripts/build-app.sh` 与 `bash Scripts/check-app.sh`，均 exit 0，已将产品提交 `340ac83` 打包替换到 `dist/PauseGuard.app`。控制器再次运行全量测试，127 个报告项包含 1 项显式 HEIC 跳过，无失败。独立审查与预览比例修复复审均通过，日志见 `.build/visual-refresh/{controller-tests.log,dist-build.log,dist-check.log,review.md}`。尚未自动启动新版或执行真实覆盖。仍待检查：明亮与复杂实拍图上的局部面板可读性、辅助功能“减少透明度”、减少视觉刺激、严格/非严格按钮与紧急解除、主显示器比例和多屏。
 
+## 2026-10-16 主视觉照片接缝羽化
+
+- 根因：Hero 原先将两张照片在 73% 位置直接拼接，黑色渐变只压暗接缝，未混合照片。现由完整主图作不透明底图，辅图在画布 64%～82% 间通过透明度渐变混合，82% 之后保持不透明；仍按源图比例填充，单图或辅图缺失时显示完整主图。`.random` 的 Hero 后备路径一致，其他四模板未改。
+- 两项真实像素测试先在原实现 RED：红/蓝实心 PNG 在接缝处相邻颜色跳变为 473，混色像素为 0；渐变压暗与单图/缺图回退也失败，共 10 个断言问题。修复后验证连续混色、单调过渡、无黑色凹陷、两端照片颜色，以及宽度 1、2、400 的单图/缺图回退。颜色参照从独立解码的夹具取得，避免把 PNG 色彩描述文件转换误判为照片染色。
+- `bash Scripts/test.sh`：129 个报告项、18 suites，无失败，包含原有 1 项显式 HEIC 跳过；亮度、尺寸上限、缓存与草稿预览用例保持通过。release 构建、暂存包 plist/路径/参数与签名检查通过，包位于 `.build/hero-feather/staged/PauseGuard.app`。本轮未运行写入 `dist` 的打包脚本，也未退出或启动正常应用。
+- RED/GREEN、release、暂存检查日志与确切命令见 `.build/hero-feather/implementation.md`。`.build/hero-feather/{before,after}/hero.png` 是人工生成夹具的合成输出，仅支持接缝像素对比；真实照片构图、桌面覆盖、面板可读性、多屏与辅助功能仍待人工验证。
+
 ## 上一次 MVP 完整运行（历史记录）
 
 | 命令 | 开始 | 结束 | 实际结果 |
