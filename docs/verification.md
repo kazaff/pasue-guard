@@ -1,6 +1,6 @@
 # 本地验证记录
 
-日期：2026-10-16；以下时间均为 **Asia/Taipei（UTC+08:00）**。最终修复基线提交 `e107abe`；本轮修复守护重试耗尽持久化及图片库元数据恢复。早前系统结束会话修复的证据保留于下文。独立最终代码审查由控制器另行执行，本记录不替代其结果。
+日期：2026-10-16；以下时间均为 **Asia/Taipei（UTC+08:00）**。最终修复基线提交 `e107abe`；本轮修复守护重试耗尽持久化及图片库元数据恢复。早前系统结束会话修复的证据保留于下文。独立最终代码审查与修复复审已通过，见 [最终代码审查记录](code-review.md)；本记录不将人工待验证项目视为通过。
 
 ## 环境与复现
 
@@ -45,7 +45,7 @@ Bundle smoke checks passed: ./dist/PauseGuard.app
 - 图片库：损坏和未来元数据用例先分别出现解码/版本错误；改为只读时空库，显式有效导入或主题保存时唯一 `.preserved-*` 备份，再保存新库。证明旧元数据、原图、缩略图保留；连续恢复使用不同副本。后台 provider 跨 actor 导入/主题管理/重新加载也通过。
 - 真实存储失败：无读取权限、无法写入、目录被文件替代仍报错；额外 RED 证明 `fileExists` 会把无访问权限目录误当缺失，改为直接读取并仅捕获真正的不存在错误，针对回归后通过。
 
-新测试共增加 11 个报告项（含两个参数化用例；每个参数化测试只计一个报告项）。完整日志、RED 记录、API 与自审见仓库本地 `.superpowers/sdd/2026-10-16-pauseguard-mvp/final-fixes-report.md` 和 `final-fixes-logs/`。这不包含 GUI 或系统实机验收。
+新测试共增加 11 个报告项（含两个参数化用例；每个参数化测试只计一个报告项）。完整日志、RED 记录、API 与自审见仓库本地 `.build/review-evidence/2026-10-16-pauseguard-mvp/final-fixes-report.md` 和该目录下的 `final-fixes-logs/`。这不包含 GUI 或系统实机验收。
 
 ## 早前交付阶段集成与 RED/GREEN
 
@@ -65,3 +65,7 @@ Bundle smoke checks passed: ./dist/PauseGuard.app
 先前演示启动命令返回 0、进程存在，仅是启动证据。原生 UI 服务 `getApp` 等待 3340 秒后返回 `-10005 timeoutReached`，未取得 AX 树或截图。控制器只向自己启动的 PID 78753 发送 SIGTERM。此轮未再调用 UI 自动化或屏幕捕获，也没有安装 Agent、调用真实 launchctl、睡眠、锁屏、注销、重启或更改系统时钟。
 
 因此首次配置、菜单、真实覆盖、紧急解除、多屏、Space、Mission Control、VoiceOver、后台任务与 Agent 实际恢复均待人工验证；详见 [AC-01～AC-14 与人工矩阵](acceptance.md)。之前目视检查的合成图片只支持模板预览结论。当前状态是可本地构建的候选包，不能宣称完整 MVP 验收完成。
+
+## 控制器最终复验与代码审查
+
+最终产品提交 `d301b16` 上再次运行测试、release 打包和包检查，三个命令均 exit 0；122 个报告项包含 1 项显式 HEIC 跳过，无失败。原始日志保留在 `.build/controller-final-*.log`。独立最终审查的两项 Important 问题均已修复并复审通过，无新增代码问题，见 [审查记录](code-review.md)。人工桌面与系统矩阵仍保持待验证。
