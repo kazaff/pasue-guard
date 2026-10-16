@@ -23,6 +23,17 @@ public struct TimerEngine: Sendable {
         state = RuntimeState(settings: settings.validated())
     }
 
+    /// Restore a validated phase snapshot using a fresh monotonic baseline.
+    /// Idle evidence is deliberately reset conservatively until the next sample.
+    public init(restoring runtime: RuntimeState, settings: UserSettings, at uptime: TimeInterval) {
+        self.init(settings: settings)
+        guard runtime.isValidForRestore, uptime.isFinite, uptime >= 0 else { return }
+        state = runtime
+        lastUptime = uptime
+        lastIdleSeconds = .infinity
+        lastIdleSampleUptime = uptime
+    }
+
     public mutating func handle(_ event: EngineEvent, at uptime: TimeInterval) {
         // Ignore stale events entirely; never move the clock baseline backwards.
         guard uptime.isFinite, uptime >= 0, uptime >= (lastUptime ?? 0) else { return }
