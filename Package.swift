@@ -4,10 +4,13 @@ import PackageDescription
 let package = Package(
     name: "PauseGuard",
     platforms: [.macOS(.v14)],
-    products: [.library(name: "PauseGuardCore", targets: ["PauseGuardCore"]),
+    products: [.library(name: "PauseGuardImages", targets: ["PauseGuardImages"]),
+               .library(name: "PauseGuardCore", targets: ["PauseGuardCore"]),
                .library(name: "PauseGuardPlatform", targets: ["PauseGuardPlatform"]),
                .library(name: "PauseGuardApp", targets: ["PauseGuardApp"])],
     targets: [
+        .target(name: "PauseGuardImages"),
+        .testTarget(name: "PauseGuardImagesTests", dependencies: ["PauseGuardImages"]),
         .target(name: "PauseGuardCore"),
         .target(name: "PauseGuardPlatform", dependencies: ["PauseGuardCore"]),
         .target(name: "PauseGuardApp", dependencies: ["PauseGuardCore", "PauseGuardPlatform"]),
