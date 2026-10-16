@@ -11,7 +11,8 @@ Drive presentation from the coordinator's published **new** `runtime` value:
 let covers = BreakWindowController()
 let background = ImageBackgroundProvider(libraryURL: imageLibraryURL)
 covers.onFailure = { [weak coordinator] error in
-    coordinator?.presentationFailed(error)
+    // Do not reenter a coordinator @Published willSet runtime publication.
+    Task { @MainActor [weak coordinator] in coordinator?.presentationFailed(error) }
 }
 // In the runtime observer, on main actor:
 if runtime.phase == .breaking && runtime.isAvailable {
@@ -59,9 +60,10 @@ uses the dark default and does not delay break entry.
 Native windows are borderless, nonmovable, floating, join all Spaces, and opt into
 full-screen auxiliary behavior. They omit ordinary close/minimize controls. Dock
 and menu-bar auto-hide are temporary, restored on every dismissal/failure. There
-are no event taps, key blockers, process-switch, Force Quit, session termination,
-or Accessibility restrictions. Foreground activation and full-screen coverage are
-best effort. System and higher modal surfaces remain available. UI supplies a large
+are no event taps, key blockers, Force Quit, session termination,
+or Accessibility restrictions. Strict mode temporarily discourages ordinary app
+switching with the public process-switch presentation option described below.
+Foreground activation and full-screen coverage are best effort. System and higher modal surfaces remain available. UI supplies a large
 countdown, opaque dark contrast panel, scrollable safe layout, reduced-transparency
 fallback, no animations, VoiceOver labels, non-strict end action, and a separate
 inline emergency confirmation before release/pause. Real Spaces, full screen,

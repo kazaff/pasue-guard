@@ -16,21 +16,27 @@ import PauseGuardPlatform
     @Published public var error: String?
     public let isDemo: Bool
     private let preferencesStore: PreferencesStore
-    private let covers = BreakWindowController()
+    private let covers: BreakWindowController
     private var subscriptions = Set<AnyCancellable>()
     private var screensObserver: NSObjectProtocol?
     private var preparedCycle: Int?
     private var messageCycle: Int?
     private var snapshotRevision = UUID()
-    public init(demo: Bool = false) {
+    private var failureRecovery: Task<Void, Never>?
+    public convenience init(demo: Bool = false) {
+        self.init(demo: demo, directory: nil, controller: nil, covers: BreakWindowController(), observeScreens: true)
+    }
+    init(demo: Bool = false, directory injectedDirectory: URL?, controller injectedController: AppController?,
+         covers: BreakWindowController, observeScreens: Bool = false) {
+        self.covers = covers
         isDemo = demo
-        let directory = demo ? FileManager.default.temporaryDirectory.appendingPathComponent("PauseGuard-demo-" + UUID().uuidString) : StateStore.defaultDirectory
+        let directory = injectedDirectory ?? (demo ? FileManager.default.temporaryDirectory.appendingPathComponent("PauseGuard-demo-" + UUID().uuidString) : StateStore.defaultDirectory)
         let store = StateStore(directory: directory)
         preferencesStore = PreferencesStore(directory: directory)
         preferences = preferencesStore.load()
         libraryURL = directory.appendingPathComponent("Images")
         background = ImageBackgroundProvider(libraryURL: libraryURL)
-        if demo {
+        if let injectedController { controller = injectedController } else if demo {
             try? store.saveSettings(UserSettings(workDurationSeconds: 300, breakDurationSeconds: 60, strictMode: false))
             let origin = SystemClock.snapshot()
             controller = AppController(store: store, clock: {
@@ -39,10 +45,21 @@ import PauseGuardPlatform
                 return now
             }, idleSeconds: { 0 })
         } else { controller = AppController(store: store) }
-        covers.onFailure = { [weak controller] error in controller?.presentationFailed(error) }
+        covers.onFailure = { [weak self] error in
+            guard let self, self.failureRecovery == nil else { return }
+            // @Published emits in willSet. Recover after the outer engine send
+            // finishes assigning/persisting runtime, never reenter that publication.
+            self.failureRecovery = Task { @MainActor [weak self] in
+                guard let self, !Task.isCancelled else { return }
+                self.failureRecovery = nil
+                self.controller.presentationFailed(error)
+            }
+        }
         controller.$runtime.sink { [weak self] runtime in self?.present(runtime) }.store(in: &subscriptions)
-        screensObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.prepareBackground() }
+        if observeScreens {
+            screensObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.prepareBackground() }
+            }
         }
         Task { [weak self] in await self?.reloadLibrary() }
     }
@@ -71,7 +88,7 @@ import PauseGuardPlatform
         do { try preferencesStore.save(preferences); prepareBackground() } catch { self.error = error.localizedDescription }
     }
     public func start() { preferences.onboardingComplete = true; savePreferences(); controller.send(.start) }
-    public func shutdown() { covers.dismiss(); background.invalidate(); controller.shutdown() }
+    public func shutdown() { failureRecovery?.cancel(); failureRecovery = nil; covers.dismiss(); background.invalidate(); controller.shutdown() }
     public func prepareBackground() {
         guard [.working, .preparing].contains(controller.runtime.phase) else { return }
         background.prepare(for: DisplayTopology.current(), singleImage: preferences.singleImage)
