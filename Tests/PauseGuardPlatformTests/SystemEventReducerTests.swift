@@ -1,4 +1,5 @@
 import Testing
+import CoreGraphics
 @testable import PauseGuardPlatform
 
 struct SystemEventReducerTests {
@@ -24,5 +25,20 @@ struct SystemEventReducerTests {
         var reducer = AvailabilityReducer()
         #expect(reducer.availability.locked)
         #expect(reducer.update(.wake).locked)
+    }
+}
+
+struct SessionEvidenceTests {
+    @Test func optionalLockFlagAbsentOnValidConsoleIsUnlocked() {
+        #expect(SessionEvidence.reducer(info: [kCGSessionOnConsoleKey as String: true]).availability.isAvailable)
+    }
+    @Test func explicitLockAndUnknownEvidenceRemainUnavailable() {
+        #expect(!SessionEvidence.reducer(info: [kCGSessionOnConsoleKey as String: true, "CGSSessionScreenIsLocked": true]).availability.isAvailable)
+        #expect(!SessionEvidence.reducer(info: nil).availability.isAvailable)
+        #expect(!SessionEvidence.reducer(info: [:]).availability.isAvailable)
+        #expect(!SessionEvidence.reducer(info: [kCGSessionOnConsoleKey as String: true, "CGSSessionScreenIsLocked": "bad"]).availability.isAvailable)
+        var switchedOut = SessionEvidence.reducer(info: [kCGSessionOnConsoleKey as String: false])
+        #expect(!switchedOut.availability.isAvailable)
+        #expect(switchedOut.update(.sessionActive).isAvailable)
     }
 }

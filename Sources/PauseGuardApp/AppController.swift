@@ -88,6 +88,14 @@ import PauseGuardPlatform
         }
     }
 
+    /// UI must release all covers before calling this fault path. It bypasses
+    /// normal strict-mode pause gating and keeps a visible, persisted error.
+    public func presentationFailed(_ error: Error) {
+        guard !terminated else { return }
+        send(.emergencyRelease)
+        record(error)
+    }
+
     public func updateSettings(_ value: UserSettings) {
         guard !terminated else { return }
         settings = value.validated()

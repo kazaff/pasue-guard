@@ -40,6 +40,18 @@ import PauseGuardPlatform
         #expect(next.runtime.phase == .stopped)
         next.shutdown()
     }
+    @Test func presentationFailureBypassesStrictPauseGateAndPersistsError() {
+        let store = store(); defer { try? FileManager.default.removeItem(at: store.directory) }
+        let clock = Clock()
+        let controller = AppController(store: store, clock: clock.sample, idleSeconds: { 0 }, systemEvents: Desktop(), startTimer: false)
+        controller.send(.start); controller.send(.beginBreak)
+        controller.presentationFailed(CocoaError(.fileReadUnknown))
+        #expect(controller.runtime.phase == .paused)
+        #expect(controller.runtime.pausedPhase == .breaking)
+        #expect(controller.lastError != nil)
+        #expect(store.loadSession()?.runtime.phase == .paused)
+        controller.shutdown()
+    }
     @Test func stopAtWorkExpiryCannotSkipBreak() {
         let store = store(); defer { try? FileManager.default.removeItem(at: store.directory) }
         let clock = Clock()

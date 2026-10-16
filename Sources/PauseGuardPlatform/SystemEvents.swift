@@ -49,7 +49,8 @@ public struct AvailabilityReducer: Sendable {
 /// macOS 14+: workspace sleep/session notifications are public APIs. The
 /// com.apple.screenIsLocked/Unlocked distributed notifications and session lock
 /// dictionary entry are best-effort OS conventions, not public lock contracts.
-/// Missing/unreadable lock evidence is unavailable, never assumed unlocked.
+/// Unreadable session evidence is unavailable; the optional lock flag may be
+/// absent on a valid console session (observed on macOS 26.5.2).
 @MainActor public final class SystemEvents: SystemEventSource {
     private var reducer = AvailabilityReducer()
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
@@ -57,12 +58,7 @@ public struct AvailabilityReducer: Sendable {
     public init() {}
     public var currentAvailability: Availability { sampleReducer().availability }
     private func sampleReducer() -> AvailabilityReducer {
-        guard let info = CGSessionCopyCurrentDictionary() as? [String: Any],
-              let onConsole = info[kCGSessionOnConsoleKey as String] as? Bool,
-              let locked = info["CGSSessionScreenIsLocked"] as? Bool else { return AvailabilityReducer() }
-        var sample = AvailabilityReducer(initial: Availability(sleeping: false, locked: locked))
-        if !onConsole { sample.update(.sessionInactive) }
-        return sample
+        SessionEvidence.reducer(info: CGSessionCopyCurrentDictionary() as? [String: Any])
     }
     public func start(onAvailability: @escaping @MainActor (Availability) -> Void) {
         stop()
@@ -91,5 +87,20 @@ public struct AvailabilityReducer: Sendable {
             }
         }
         observers.append((center, token))
+    }
+}
+
+/// Pure interpretation of best-effort OS evidence. A missing optional lock flag
+/// differs from an unreadable dictionary or missing/invalid console status.
+enum SessionEvidence {
+    static func reducer(info: [String: Any]?) -> AvailabilityReducer {
+        guard let info, let onConsole = info[kCGSessionOnConsoleKey as String] as? Bool else {
+            return AvailabilityReducer()
+        }
+        if let raw = info["CGSSessionScreenIsLocked"], !(raw is Bool) { return AvailabilityReducer() }
+        let locked = info["CGSSessionScreenIsLocked"] as? Bool ?? false
+        var sample = AvailabilityReducer(initial: Availability(sleeping: false, locked: locked))
+        if !onConsole { sample.update(.sessionInactive) }
+        return sample
     }
 }

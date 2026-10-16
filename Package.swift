@@ -13,7 +13,7 @@ let package = Package(
         .testTarget(name: "PauseGuardImagesTests", dependencies: ["PauseGuardImages"]),
         .target(name: "PauseGuardCore"),
         .target(name: "PauseGuardPlatform", dependencies: ["PauseGuardCore"]),
-        .target(name: "PauseGuardApp", dependencies: ["PauseGuardCore", "PauseGuardPlatform"]),
+        .target(name: "PauseGuardApp", dependencies: ["PauseGuardCore", "PauseGuardPlatform", "PauseGuardImages"]),
         .testTarget(name: "PauseGuardAppTests", dependencies: ["PauseGuardApp"]),
         .testTarget(name: "PauseGuardPlatformTests", dependencies: ["PauseGuardPlatform"]),
         .testTarget(name: "PauseGuardCoreTests", dependencies: ["PauseGuardCore"])
