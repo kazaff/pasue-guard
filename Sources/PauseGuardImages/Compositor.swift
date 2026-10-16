@@ -18,7 +18,7 @@ public enum Compositor {
         // Load/decode one tile at a time. A missing asset is skipped; a wholly missing selection
         // still yields the dark, legible built-in background.
         let assets = Array(selection.assets.prefix(4))
-        func draw(_ index: Int, _ rect: CGRect, blur: Double = 0, saturation: Double = 0.78, rotation: CGFloat = 0, frame: Bool = false) {
+        func draw(_ index: Int, _ rect: CGRect, blur: Double = 0, saturation: Double = 1, rotation: CGFloat = 0, frame: Bool = false) {
             guard !assets.isEmpty else { return }
             let pixelLimit = min(blur > 0 ? 1024 : 4096, max(1, Int(ceil(max(rect.width, rect.height)))))
             guard let decoded = try? ImageDecoding.load(assets[index % assets.count], libraryURL: libraryURL, maxPixel: pixelLimit),
@@ -43,36 +43,29 @@ public enum Compositor {
             draw(0, bounds, blur: 14)
             draw(0, CGRect(x: 0, y: 0, width: w * 0.73, height: h))
             if assets.count > 1 { draw(1, CGRect(x: w * 0.73, y: 0, width: w * 0.27, height: h), blur: 3) }
-            linearShade(context, start: CGPoint(x: w * 0.6, y: 0), end: CGPoint(x: w * 0.82, y: 0), alpha: 0.4)
+            linearShade(context, start: CGPoint(x: w * 0.6, y: 0), end: CGPoint(x: w * 0.82, y: 0), alpha: 0.08)
         case .grid:
             let gap = max(2, min(w, h) * 0.018)
             for index in 0..<4 {
                 draw(index, CGRect(x: CGFloat(index % 2) * (w + gap) / 2, y: CGFloat(index / 2) * (h + gap) / 2, width: (w - gap) / 2, height: (h - gap) / 2))
             }
         case .collage:
-            draw(0, bounds, blur: 24, saturation: 0.5)
-            context.setFillColor(CGColor(red: 0.04, green: 0.08, blue: 0.1, alpha: 0.45)); context.fill(bounds)
+            draw(0, bounds, blur: 24, saturation: 1)
+            context.setFillColor(CGColor(red: 0.04, green: 0.08, blue: 0.1, alpha: 0.06)); context.fill(bounds)
             draw(0, CGRect(x: w * 0.025, y: h * 0.22, width: w * 0.36, height: h * 0.68), rotation: -0.12, frame: true)
             draw(1, CGRect(x: w * 0.62, y: h * 0.1, width: w * 0.34, height: h * 0.66), rotation: 0.13, frame: true)
             draw(2, CGRect(x: w * 0.35, y: h * 0.05, width: w * 0.3, height: h * 0.55), rotation: 0.04, frame: true)
         case .cinematic:
-            draw(0, bounds, blur: 28, saturation: 0.25)
-            context.setFillColor(CGColor(gray: 0, alpha: 0.65)); context.fill(bounds)
-            draw(0, CGRect(x: 0, y: h * 0.16, width: w, height: h * 0.68), saturation: 0.35)
-            context.setFillColor(CGColor(red: 0.08, green: 0.17, blue: 0.19, alpha: 0.35)); context.fill(bounds)
+            draw(0, bounds, blur: 28, saturation: 1)
+            context.setFillColor(CGColor(gray: 0, alpha: 0.08)); context.fill(bounds)
+            draw(0, CGRect(x: 0, y: h * 0.16, width: w, height: h * 0.68), saturation: 1)
         case .minimal:
-            draw(0, bounds, blur: 42, saturation: 0.35)
-            context.setFillColor(CGColor(red: 0.03, green: 0.08, blue: 0.1, alpha: 0.72)); context.fill(bounds)
+            draw(0, bounds, blur: 42, saturation: 1)
+            context.setFillColor(CGColor(red: 0.03, green: 0.08, blue: 0.1, alpha: 0.06)); context.fill(bounds)
             let side = min(w * 0.31, h * 0.64)
-            draw(0, CGRect(x: w * 0.69 - side / 2, y: h / 2 - side / 2, width: side, height: side), saturation: 0.6)
+            draw(0, CGRect(x: w * 0.69 - side / 2, y: h / 2 - side / 2, width: side, height: side), saturation: 1)
             context.setFillColor(CGColor(red: 0.5, green: 0.7, blue: 0.68, alpha: 0.6))
             context.fill(CGRect(x: w * 0.12, y: h * 0.72, width: w * 0.07, height: max(1, h * 0.006)))
-        }
-        // Feather darkening into the center, reserving contrast for a white countdown overlay.
-        let colors = [CGColor(gray: 0, alpha: 0.82), CGColor(gray: 0, alpha: 0.7), CGColor(gray: 0, alpha: 0.1)]
-        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors as CFArray, locations: [0, 0.38, 1]) {
-            context.drawRadialGradient(gradient, startCenter: CGPoint(x: w / 2, y: h / 2), startRadius: 0,
-                endCenter: CGPoint(x: w / 2, y: h / 2), endRadius: max(w, h) * 0.7, options: [.drawsAfterEndLocation])
         }
         guard let image = context.makeImage() else { throw ImageLibraryError.cannotCreateImage }
         return image
@@ -91,9 +84,9 @@ public enum Compositor {
             let r = Double(bytes[index]), g = Double(bytes[index + 1]), b = Double(bytes[index + 2])
             let luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
             let base = luminance * (1 - saturation)
-            bytes[index] = UInt8(max(0, min(255, ((base + r * saturation) - 127.5) * 0.94 + 121.125)))
-            bytes[index + 1] = UInt8(max(0, min(255, ((base + g * saturation) - 127.5) * 0.94 + 121.125)))
-            bytes[index + 2] = UInt8(max(0, min(255, ((base + b * saturation) - 127.5) * 0.94 + 121.125)))
+            bytes[index] = UInt8(max(0, min(255, base + r * saturation)))
+            bytes[index + 1] = UInt8(max(0, min(255, base + g * saturation)))
+            bytes[index + 2] = UInt8(max(0, min(255, base + b * saturation)))
         }
         if blur > 0 {
             var output = [UInt8](repeating: 0, count: bytes.count)

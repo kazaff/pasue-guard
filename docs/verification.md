@@ -19,7 +19,16 @@ bash Scripts/check-app.sh
 
 `Scripts/test.sh` 执行 `swift test` 并提供 CLT Testing 框架路径及本地模块缓存。`Scripts/build-app.sh` 执行 `swift build -c release`（含本地缓存、disable-sandbox 参数），随后复制两个可执行文件、生成 plist 并 ad hoc 签名。`Scripts/check-app.sh` 校验路径、标识符、参数、plist、执行权限及签名；拒绝演示模式安装/移除的负向检查在副作用前退出。
 
-## 最新完整运行
+## 2026-10-16 图片亮度与草稿模板预览
+
+- `bash Scripts/test.sh`：125 个报告项、18 suites，无失败，其中原有 HEIC 编码器用例 1 项显式跳过。真实临时图片库验证草稿图片隔离、五个具体模板、单图与多图顺序、删除/缺失/空选择、取消、库文件逐字节不变，以及正常 provider 已准备背景的缓存对象保持不变。
+- 亮度回归先以五个布局的照片内部区域复现叠加遮罩导致的失败，再移除全局中心暗角与覆盖层、恢复近原始色调。最终以每布局 49 像素区域的平均红/绿亮度及暖色保留比例验证，取代旧的“中心必须变暗”断言；原有无效尺寸、空素材、源图预算测试保留。
+- release `swift build` 通过；为避免覆盖正在运行的正常应用，未执行会写入 `dist` 的打包脚本。按其等价复制、生成 plist、ad hoc 签名步骤，将新包暂存到 `.build/visual-refresh/staged/PauseGuard.app`，并运行指向暂存路径的等价 `check-app.sh`，全部通过。确切命令与日志保存在 `.build/visual-refresh/{stage.sh,check-staged.sh,release-build.log,stage.log,check-staged.log}`。
+- 可选测试导出 `.build/visual-refresh/previews/` 的五模板与共享面板合成 PNG。这些使用人工生成的图片夹具和离屏 `ImageRenderer`，不能证明真实桌面 Material 模糊、覆盖窗口、VoiceOver 或多屏行为。没有调用原生 UI 自动化、终止正常实例、安装登录项或触发睡眠/注销。
+
+运行中 `dist/PauseGuard.app` 保持原样；需正常退出后重新打包再人工验收新画面。仍待检查：明亮与复杂实拍图上的局部面板可读性、辅助功能“减少透明度”、减少视觉刺激、严格/非严格按钮与紧急解除、主显示器比例和多屏。
+
+## 上一次 MVP 完整运行（历史记录）
 
 | 命令 | 开始 | 结束 | 实际结果 |
 |---|---|---|---|

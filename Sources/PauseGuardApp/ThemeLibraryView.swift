@@ -31,6 +31,7 @@ struct ThemeLibraryView: View {
 private struct ThemeEditor: View {
     @ObservedObject var model: DesktopModel
     @State var theme: BreakTheme
+    @State private var previewing = false
     let save: (BreakTheme) -> Void
     @Environment(\.dismiss) private var dismiss
     var body: some View {
@@ -39,6 +40,7 @@ private struct ThemeEditor: View {
             TextField("图集名称", text: $theme.name)
             Toggle("启用图集", isOn: $theme.enabled)
             Picker("布局模板", selection: $theme.layoutMode) { ForEach(LayoutMode.allCases, id: \.self) { Text($0.title).tag($0) } }
+            Button("预览全部模板", systemImage: "rectangle.grid.2x2") { previewing = true }
             ScrollView {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 120))]) {
                     ForEach(model.assets) { asset in
@@ -53,6 +55,7 @@ private struct ThemeEditor: View {
             }.frame(height: 240)
             HStack { Button("取消") { dismiss() }; Spacer(); Button("保存") { theme.name = theme.name.trimmingCharacters(in: .whitespacesAndNewlines); save(theme) }.buttonStyle(.borderedProminent).disabled(theme.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !model.editingAllowed) }
         }.padding(24).frame(width: 540)
+            .sheet(isPresented: $previewing) { ThemePreviewGallery(model: model, theme: $theme) }
     }
 }
 extension LayoutMode {

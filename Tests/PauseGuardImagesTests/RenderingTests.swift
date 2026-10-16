@@ -60,15 +60,26 @@ func pixels(_ image: CGImage) throws -> [UInt8] {
     #expect(Set(outputs).count == 5)
 }
 
-@Test func testSingleImageFallbackAndSafeCountdownCenter() throws {
+// Catches a global shade/tint or destructive tone adjustment over the photo subject.
+@Test func testBrightPhotoSubjectsKeepBrightnessAndColorInEveryLayout() throws {
     let root = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: root) }
     let library = try AssetLibrary(rootURL: root.appendingPathComponent("library"))
-    let assets = try library.importImages([fixture(root, color: CGColor(gray: 1, alpha: 1))])
-    for mode in LayoutMode.concreteCases {
+    let assets = try library.importImages([fixture(root, color: CGColor(red: 1, green: 0.8, blue: 0.2, alpha: 1))])
+    // Hand-picked interior photo regions (normalized bottom-left compositor coordinates).
+    let regions: [(LayoutMode, CGFloat, CGFloat)] = [(.hero, 0.35, 0.5), (.grid, 0.25, 0.25),
+        (.collage, 0.2, 0.6), (.cinematic, 0.5, 0.5), (.minimal, 0.69, 0.5)]
+    for (mode, x, y) in regions {
         let image = try Compositor.render(selection: Selection(layoutMode: mode, assets: assets), size: CGSize(width: 320, height: 200), libraryURL: library.rootURL)
-        let data = try pixels(image); let offset = (100 * 320 + 160) * 4
-        #expect(max(data[offset], data[offset + 1], data[offset + 2]) < 95)
-        #expect(data[offset + 3] == 255)
+        let data = try pixels(image)
+        var samples: [(Int, Int, Int)] = []
+        for dx in -3...3 { for dy in -3...3 {
+            let offset = ((Int(y * 200) + dy) * 320 + Int(x * 320) + dx) * 4
+            samples.append((Int(data[offset]), Int(data[offset + 1]), Int(data[offset + 2])))
+        } }
+        let count = samples.count
+        #expect(samples.reduce(0) { $0 + $1.0 } / count > 230, "\(mode): average red subject brightness")
+        #expect(samples.reduce(0) { $0 + $1.1 } / count > 180, "\(mode): average green subject brightness")
+        #expect(samples.filter { $0.0 - $0.2 > 140 }.count >= count * 9 / 10, "\(mode): preserve warm color across photo region")
     }
 }
 

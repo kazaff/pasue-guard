@@ -12,7 +12,6 @@ import PauseGuardCore
 struct BreakView: View {
     @ObservedObject var model: BreakViewModel
     let onEvent: (EngineEvent) -> Void
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var confirmingEmergency = false
     private var countdown: String {
         let remaining = model.runtime.breakRemainingSeconds
@@ -22,21 +21,10 @@ struct BreakView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                Color(red: 0.035, green: 0.05, blue: 0.08)
-                if let image = model.image, !reduceTransparency, !model.reduceVisualStimulation {
-                    Image(decorative: image, scale: 1).resizable().scaledToFill()
-                        .frame(width: geometry.size.width, height: geometry.size.height).clipped()
-                    Color.black.opacity(0.35)
-                }
+                BreakBackdrop(image: model.image, reduceVisualStimulation: model.reduceVisualStimulation)
                 ScrollView {
-                    VStack(spacing: 24) {
-                        Text("休息一下").font(.largeTitle.bold())
-                        Text(countdown)
-                            .font(.system(size: min(100, max(44, geometry.size.width * 0.12)), weight: .medium, design: .rounded))
-                            .monospacedDigit()
-                            .accessibilityLabel("剩余休息时间 \(countdown)")
-                        Text(model.message).font(.title3)
-                            .multilineTextAlignment(.center)
+                    BreakInfoPanel(countdown: countdown, message: model.message,
+                        countdownSize: min(100, max(44, geometry.size.width * 0.12))) {
                         if !model.runtime.cycleSettings.strictMode {
                             Button("结束本次休息") { onEvent(.endBreak) }
                                 .buttonStyle(.borderedProminent).controlSize(.large)
@@ -51,9 +39,6 @@ struct BreakView: View {
                                 .accessibilityHint("打开确认步骤。确认后解除所有覆盖并暂停循环。")
                         }
                     }
-                    .padding(32)
-                    .frame(maxWidth: 620)
-                    .background(Color.black.opacity(reduceTransparency ? 1 : 0.82), in: RoundedRectangle(cornerRadius: 24))
                     .padding(.horizontal, max(16, geometry.safeAreaInsets.leading + 16))
                     .padding(.vertical, max(32, geometry.safeAreaInsets.top + 16))
                     .frame(maxWidth: .infinity, minHeight: geometry.size.height)
