@@ -6,6 +6,17 @@ struct BackgroundSettingsView: View {
     @State private var messages = ""
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
+            Text("休息视频").font(.headline)
+            Text("选择一个 MP4 后优先静音循环播放；无法播放时使用图片背景。开启减少视觉刺激时不播放视频。")
+                .font(.callout).foregroundStyle(.secondary)
+            HStack {
+                Button(model.preferences.videoFileName == nil ? "选择 MP4 视频…" : "更换视频…") { model.importVideo() }
+                if model.preferences.videoFileName != nil {
+                    Label("已选择一个视频", systemImage: "video.fill")
+                    Button("移除视频") { model.removeVideo() }
+                }
+            }.disabled(model.busy)
+            Divider()
             Picker("图片数量", selection: Binding(get: { model.preferences.singleImage }, set: { model.preferences.singleImage = $0; model.savePreferences() })) {
                 Text("多图自动合成").tag(false); Text("单图").tag(true)
             }.pickerStyle(.segmented)

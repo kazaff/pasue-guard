@@ -3,7 +3,7 @@ import Foundation
 public enum EngineEvent: Equatable, Sendable {
     case start, pause, resume, stop
     case tick(idleSeconds: TimeInterval)
-    case beginBreak, endBreak, emergencyRelease
+    case beginBreak, endBreak, emergencyRelease, skipUpcomingBreak
     /// The platform reducer supplies the full current availability snapshot.
     case availabilityChanged(sleeping: Bool, locked: Bool)
     case updateSettings(UserSettings)
@@ -80,6 +80,10 @@ public struct TimerEngine: Sendable {
         case .updateSettings(let newSettings): settings = newSettings.validated()
         case .availabilityChanged(let sleeping, let locked):
             updateAvailability(sleeping: sleeping, locked: locked, at: uptime)
+        case .skipUpcomingBreak:
+            guard state.phase == .preparing, state.isAvailable else { return }
+            state.skippedBreakCount = min(6, state.skippedBreakCount + 1)
+            startWork(reason: .warningSkipped)
         case .tick: break
         }
     }
@@ -131,7 +135,7 @@ public struct TimerEngine: Sendable {
             state.awayStartedAt = uptime
             state.awayElapsedSeconds = 0
         } else if !wasAvailable && state.isAvailable {
-            if isWorking, state.awayElapsedSeconds >= state.cycleSettings.breakDurationSeconds {
+            if isWorking, state.awayElapsedSeconds >= state.pendingBreakDuration(base: state.cycleSettings.breakDurationSeconds) {
                 startWork(reason: .awayRestCompleted)
             } else if state.phase == .breaking, state.breakRemainingSeconds == 0 {
                 startWork(reason: .breakCompleted)
@@ -157,14 +161,15 @@ public struct TimerEngine: Sendable {
     private mutating func startBreak(reason: TransitionReason) {
         // Work fields remain frozen for the work cycle; the next corresponding
         // break captures the latest duration and enforcement settings.
-        state.cycleSettings.breakDurationSeconds = settings.breakDurationSeconds
+        state.cycleSettings.breakDurationSeconds = state.pendingBreakDuration(base: settings.breakDurationSeconds)
         state.cycleSettings.strictMode = settings.strictMode
-        state.breakRemainingSeconds = settings.breakDurationSeconds
+        state.breakRemainingSeconds = state.cycleSettings.breakDurationSeconds
         state.phase = .breaking
         state.lastTransitionReason = reason
     }
 
     private mutating func startWork(reason: TransitionReason) {
+        if reason == .breakCompleted || reason == .awayRestCompleted { state.skippedBreakCount = 0 }
         state.cycleSettings = settings
         state.workRemainingSeconds = settings.workDurationSeconds
         state.breakRemainingSeconds = settings.breakDurationSeconds

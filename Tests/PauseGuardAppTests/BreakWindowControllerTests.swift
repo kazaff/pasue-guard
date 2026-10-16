@@ -99,6 +99,35 @@ import PauseGuardPlatform
         #expect(backend.covers[0].released)
         #expect(!backend.active)
     }
+    @Test func emergencyReleasesAllScreensBeforeCoordinatorAndIgnoresDuplicateConfirmation() throws {
+        let backend = MemoryBackend(), background = DelayedBackground()
+        backend.displays.append(DisplayDescriptor(id: 2, frame: .zero, scale: 1, isMain: false))
+        let controller = BreakWindowController(backend: backend, observeScreens: false)
+        var events: [EngineEvent] = []
+        try controller.show(runtime: runtime(), background: background, onEvent: { event in
+            #expect(!backend.active)
+            #expect(backend.covers.count == 2)
+            #expect(backend.covers.allSatisfy { $0.released })
+            events.append(event)
+        })
+        backend.callbacks[1](.emergencyRelease)
+        backend.callbacks[0](.emergencyRelease)
+        #expect(events == [.emergencyRelease])
+    }
+    @Test func removedCoverCallbackCannotReleaseReplacementInSameCycle() throws {
+        let backend = MemoryBackend(), background = DelayedBackground()
+        let controller = BreakWindowController(backend: backend, observeScreens: false)
+        var events: [EngineEvent] = []
+        try controller.show(runtime: runtime(), background: background, onEvent: { events.append($0) })
+        backend.displays[0] = DisplayDescriptor(id: 1, frame: CGRect(x: 0, y: 0, width: 200, height: 100), scale: 1, isMain: true)
+        controller.screensChanged()
+        backend.callbacks[0](.emergencyRelease)
+        #expect(events.isEmpty)
+        #expect(backend.active)
+        #expect(!backend.covers[1].released)
+        backend.callbacks[1](.emergencyRelease)
+        #expect(events == [.emergencyRelease])
+    }
     @Test func nonStrictEndReleasesBeforeCoordinator() throws {
         let backend = MemoryBackend(), background = DelayedBackground()
         let controller = BreakWindowController(backend: backend, observeScreens: false)

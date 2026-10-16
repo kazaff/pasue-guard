@@ -6,7 +6,7 @@ public enum RuntimePhase: String, Codable, Sendable {
 
 public enum TransitionReason: String, Codable, Sendable {
     case initialized, started, workCompleted, breakCompleted, earlyBreak, breakEnded
-    case userPaused, resumed, stopped, emergencyRelease, awayRestCompleted, preBreakWarning
+    case userPaused, resumed, stopped, emergencyRelease, awayRestCompleted, preBreakWarning, warningSkipped
 }
 
 public struct RuntimeState: Codable, Equatable, Sendable {
@@ -21,6 +21,14 @@ public struct RuntimeState: Codable, Equatable, Sendable {
     public var awayStartedAt: TimeInterval?
     public var awayElapsedSeconds: TimeInterval = 0
     public var pausedPhase: RuntimePhase?
+    private var deferredBreakCount: Int?
+    public var skippedBreakCount: Int {
+        get { deferredBreakCount ?? 0 }
+        set { deferredBreakCount = newValue }
+    }
+    public func pendingBreakDuration(base: TimeInterval) -> TimeInterval {
+        min(3600, base * pow(2, Double(min(6, max(0, skippedBreakCount)))))
+    }
     public var isAvailable: Bool { !sleeping && !locked }
 
     public init(settings: UserSettings = UserSettings()) {
@@ -41,6 +49,7 @@ extension RuntimeState {
         return settings == settings.validated() &&
             workRemainingSeconds.isFinite && (0...settings.workDurationSeconds).contains(workRemainingSeconds) &&
             breakRemainingSeconds.isFinite && (0...settings.breakDurationSeconds).contains(breakRemainingSeconds) &&
+            (0...6).contains(skippedBreakCount) &&
             cycleNumber >= 0 && cycleNumber < Int.max &&
             awayElapsedSeconds.isFinite && awayElapsedSeconds >= 0 &&
             (awayStartedAt.map { $0.isFinite && $0 >= 0 } ?? true) &&

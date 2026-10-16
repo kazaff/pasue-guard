@@ -48,13 +48,15 @@ public struct SettingsView: View {
             Text("活跃计时会扣除超过 60 秒的空闲时间。睡眠和锁屏不计入工作时间，离开满一次休息时长后重新开始工作周期。")
                 .font(.callout).foregroundStyle(.secondary)
             Stepper("提前预告  \(Int(controller.settings.preBreakWarningSeconds)) 秒", value: binding(\.preBreakWarningSeconds), in: 0...60, step: 5)
+            Text("预告设为 0 秒时关闭预告。预告中跳过会让下次休息翻倍，最高 60 分钟；完成完整休息后恢复。")
+                .font(.caption).foregroundStyle(.secondary)
             Text("工作时长在下个工作周期生效；休息时长和严格模式在下次休息生效。").font(.caption).foregroundStyle(.secondary)
         }
     }
     private var enforcement: some View {
         VStack(alignment: .leading, spacing: 18) {
             Toggle("严格模式", isOn: binding(\.strictMode))
-            Text("严格休息中无法提前结束、暂停或正常退出。所有显示器显示倒计时；确认紧急解除后会释放覆盖并暂停循环。")
+            Text("严格休息中无法提前结束、暂停或正常退出。所有显示器显示倒计时；紧急解除需等待 5 秒并输入 4 位验证码，完成后释放覆盖并暂停循环。")
             Text("系统强制退出、会话和辅助功能操作保持可用。覆盖与前台激活为尽力执行，无法保证隔离其他应用或系统界面。")
                 .font(.callout).foregroundStyle(.secondary)
         }

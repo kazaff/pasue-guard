@@ -22,6 +22,7 @@ import PauseGuardPlatform
     private let setLoginEnabled: (Bool) throws -> Void
     private let readLoginItemPaths: () -> [String]
     private let covers: BreakWindowController
+    private let warning: PreBreakWarningController?
     private var subscriptions = Set<AnyCancellable>()
     private var screensObserver: NSObjectProtocol?
     private var preparedCycle: Int?
@@ -38,6 +39,7 @@ import PauseGuardPlatform
         self.setLoginEnabled = setLoginEnabled
         self.readLoginItemPaths = loginItemPaths
         self.covers = covers
+        warning = observeScreens ? PreBreakWarningController() : nil
         isDemo = demo
         let directory = injectedDirectory ?? (demo ? FileManager.default.temporaryDirectory.appendingPathComponent("PauseGuard-demo-" + UUID().uuidString) : StateStore.defaultDirectory)
         let store = StateStore(directory: directory)
@@ -80,20 +82,54 @@ import PauseGuardPlatform
     isolated deinit { if let screensObserver { NotificationCenter.default.removeObserver(screensObserver) } }
     private func present(_ runtime: RuntimeState) {
         objectWillChange.send()
+        warning?.update(runtime, baseDuration: controller.settings.breakDurationSeconds) { [weak controller] in
+            controller?.send(.skipUpcomingBreak)
+        }
         if runtime.phase == .breaking && runtime.isAvailable {
             if messageCycle != runtime.cycleNumber {
                 messageCycle = runtime.cycleNumber
                 covers.message = preferences.randomMessage()
                 covers.reduceVisualStimulation = preferences.reduceVisualStimulation
+                covers.videoURL = preferences.reduceVisualStimulation ? nil : videoLibrary.url(for: preferences.videoFileName)
             }
             do { try covers.show(runtime: runtime, background: background) { [weak controller] in controller?.send($0) } } catch { /* onFailure performs recovery once */ }
         } else {
-            covers.dismiss()
+            covers.dismiss(animated: runtime.lastTransitionReason == .breakCompleted && runtime.isAvailable)
             if [.working, .preparing].contains(runtime.phase), preparedCycle != runtime.cycleNumber {
                 preparedCycle = runtime.cycleNumber
                 background.prepare(for: DisplayTopology.current(), singleImage: preferences.singleImage)
             }
         }
+    }
+    private var videoLibrary: VideoLibrary { VideoLibrary(directory: preferencesStore.directory.appendingPathComponent("Video")) }
+    public func importVideo() {
+        guard editingAllowed, !busy else { return }
+        let panel = NSOpenPanel(); panel.allowedContentTypes = [.mpeg4Movie]
+        panel.allowsMultipleSelection = false; panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        busy = true
+        Task { [weak self] in
+            guard let self else { return }
+            let old = self.preferences.videoFileName
+            do {
+                let name = try await self.videoLibrary.importVideo(url)
+                var changed = self.preferences; changed.videoFileName = name
+                do { try self.preferencesStore.save(changed) }
+                catch { if let url = self.videoLibrary.url(for: name) { try? FileManager.default.removeItem(at: url) }; throw error }
+                self.preferences = changed
+                if let old, old != name, let oldURL = self.videoLibrary.url(for: old) { try? FileManager.default.removeItem(at: oldURL) }
+            } catch { self.error = error.localizedDescription }
+            self.busy = false
+        }
+    }
+    public func removeVideo() {
+        guard editingAllowed, !busy else { return }
+        let old = preferences.videoFileName
+        var changed = preferences; changed.videoFileName = nil
+        do {
+            try preferencesStore.save(changed); preferences = changed
+            if let url = videoLibrary.url(for: old) { try? FileManager.default.removeItem(at: url) }
+        } catch { self.error = error.localizedDescription }
     }
     public var editingAllowed: Bool { controller.runtime.phase != .breaking }
     public func savePreferences() {
@@ -154,6 +190,7 @@ import PauseGuardPlatform
     }
     public func shutdown(preservingSession: Bool = false) {
         failureRecovery?.cancel(); failureRecovery = nil
+        warning?.dismiss()
         covers.dismiss(); background.invalidate()
         controller.shutdown(preservingSession: preservingSession)
     }

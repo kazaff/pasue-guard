@@ -13,7 +13,10 @@ import PauseGuardPlatform
     func update(runtime: RuntimeState)
     func setBackground(_ image: CGImage?)
     func release()
+    func fadeOut()
 }
+
+extension BreakCover { func fadeOut() { release() } }
 @MainActor protocol BreakPresentationBackend: AnyObject {
     var displays: [DisplayDescriptor] { get }
     func begin()
@@ -30,8 +33,10 @@ extension BreakPresentationBackend { func setStrictMode(_ strict: Bool) {} }
     public var onFailure: ((Error) -> Void)?
     public var message = "让目光看向远处，放松肩膀，起身活动。"
     public var reduceVisualStimulation = false
+    public var videoURL: URL?
     private let backend: any BreakPresentationBackend
     private var covers: [UInt32: any BreakCover] = [:]
+    private var coverTokens: [UInt32: UUID] = [:]
     private var descriptors: [DisplayDescriptor] = []
     private var background: (any BackgroundProvider)?
     private var runtime: RuntimeState?
@@ -73,11 +78,12 @@ extension BreakPresentationBackend { func setStrictMode(_ strict: Bool) {} }
         self.runtime = runtime
         covers.values.forEach { $0.update(runtime: runtime) }
     }
-    public func dismiss() {
+    public func dismiss(animated: Bool = false) {
         generation = UUID()
         if let observer { NotificationCenter.default.removeObserver(observer) }
         observer = nil
-        covers.values.forEach { $0.release() }; covers.removeAll()
+        covers.values.forEach { animated ? $0.fadeOut() : $0.release() }; covers.removeAll()
+        coverTokens = [:]
         descriptors = []; runtime = nil; background = nil; onEvent = nil
         backend.end()
     }
@@ -90,7 +96,7 @@ extension BreakPresentationBackend { func setStrictMode(_ strict: Bool) {} }
         default: return
         }
         let callback = onEvent
-        dismiss() // Release before calling the coordinator, even if it fails.
+        dismiss(animated: true) // Release before calling the coordinator, even if it fails.
         callback?(event)
     }
     func screensChanged() {
@@ -107,15 +113,19 @@ extension BreakPresentationBackend { func setStrictMode(_ strict: Bool) {} }
         guard !displays.isEmpty else { throw PresentationError.noDisplays }
         let changes = DisplayTopology.diff(previous: descriptors, current: displays)
         for descriptor in changes.removed + changes.updated {
+            coverTokens.removeValue(forKey: descriptor.id)
             covers.removeValue(forKey: descriptor.id)?.release()
         }
         let token = generation
         for descriptor in changes.added + changes.updated {
+            let coverToken = UUID()
+            coverTokens[descriptor.id] = coverToken
             let cover = try backend.makeCover(display: descriptor, runtime: runtime) { [weak self] event in
-                guard let self, self.generation == token else { return }
+                guard let self, self.generation == token,
+                      self.coverTokens[descriptor.id] == coverToken else { return }
                 self.handle(event)
             }
-            (cover as? AppKitBreakCover)?.configure(message: message, reduceVisualStimulation: reduceVisualStimulation)
+            (cover as? AppKitBreakCover)?.configure(message: message, reduceVisualStimulation: reduceVisualStimulation, videoURL: videoURL)
             covers[descriptor.id] = cover
             let image = background.image(for: descriptor) { [weak self, weak cover] image in
                 guard let self, self.generation == token,
@@ -180,13 +190,25 @@ private final class CoverWindow: NSWindow {
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         window.hidesOnDeactivate = false
         window.isMovable = false
-        window.backgroundColor = .black
+        window.backgroundColor = .clear
+        window.isOpaque = false
         window.contentView = NSHostingView(rootView: BreakView(model: model, onEvent: onEvent))
         window.setFrame(screen.frame, display: true)
         window.makeKeyAndOrderFront(nil)
     }
-    func configure(message: String, reduceVisualStimulation: Bool) { model.message = message; model.reduceVisualStimulation = reduceVisualStimulation }
+    func configure(message: String, reduceVisualStimulation: Bool, videoURL: URL?) { model.message = message; model.reduceVisualStimulation = reduceVisualStimulation; model.videoURL = videoURL }
     func update(runtime: RuntimeState) { model.runtime = runtime }
     func setBackground(_ image: CGImage?) { model.image = image }
-    func release() { window.orderOut(nil); window.close() }
+    func release() { model.videoURL = nil; window.orderOut(nil); window.close() }
+    func fadeOut() {
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { release(); return }
+        // Enforcement ends immediately. The outgoing picture is decorative only.
+        window.ignoresMouseEvents = true; window.resignKey(); window.level = .normal
+        model.exiting = true
+        let window = window, model = model
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(600))
+            model.videoURL = nil; window.orderOut(nil); window.close()
+        }
+    }
 }

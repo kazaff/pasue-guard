@@ -3,6 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 app="$PWD/dist/PauseGuard.app"
 [[ -d "$app/Contents/Resources" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$app/Contents/Info.plist")" == PauseGuard.icns ]]
+sips -g pixelWidth -g pixelHeight "$app/Contents/Resources/PauseGuard.icns"
 [[ -x "$app/Contents/MacOS/PauseGuard" ]]
 [[ -x "$app/Contents/MacOS/PauseGuardAgent" ]]
 /usr/bin/plutil -lint "$app/Contents/Info.plist" "$app/Contents/Resources/com.pauseguard.agent.plist" "$app/Contents/Resources/com.pauseguard.login.plist"
