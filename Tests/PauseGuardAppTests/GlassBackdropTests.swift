@@ -38,23 +38,25 @@ import UniformTypeIdentifiers
     private func channel(_ bytes: [UInt8], x: Int, y: Int = 400, _ channel: Int) -> Double {
         Double(bytes[(y * 1200 + x) * 4 + channel])
     }
+    private func export(_ pixels: [UInt8], name: String) throws {
+        if let folder = ProcessInfo.processInfo.environment["PAUSEGUARD_GLASS_EXPORT_DIR"] {
+            try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+            var bytes = pixels
+            let image = bytes.withUnsafeMutableBytes { buffer in
+                CGContext(data: buffer.baseAddress, width: 1200, height: 800, bitsPerComponent: 8,
+                    bytesPerRow: 4800, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!.makeImage()!
+            }
+            let url = URL(fileURLWithPath: folder).appendingPathComponent(name + ".png")
+            let destination = try #require(CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil))
+            CGImageDestinationAddImage(destination, image, nil)
+            #expect(CGImageDestinationFinalize(destination))
+        }
+    }
     @Test func panelRetainsAlignedPhotoColorsAndBlursFineDetail() throws {
         let a = try render(fixture())
         let b = try render(fixture(swapped: true))
-        if let folder = ProcessInfo.processInfo.environment["PAUSEGUARD_GLASS_EXPORT_DIR"] {
-            try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
-            for (name, pixels) in [("striped-red-blue", a), ("striped-blue-red", b)] {
-                var bytes = pixels
-                let image = bytes.withUnsafeMutableBytes { buffer in
-                    CGContext(data: buffer.baseAddress, width: 1200, height: 800, bitsPerComponent: 8,
-                        bytesPerRow: 4800, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!.makeImage()!
-                }
-                let url = URL(fileURLWithPath: folder).appendingPathComponent(name + ".png")
-                let destination = try #require(CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil))
-                CGImageDestinationAddImage(destination, image, nil)
-                #expect(CGImageDestinationFinalize(destination))
-            }
-        }
+        try export(a, name: "striped-red-blue")
+        try export(b, name: "striped-blue-red")
         let foregroundPixels = (250..<550).reduce(0) { total, y in
             total + (430..<770).filter { x in
                 channel(a, x: x, y: y, 0) > 225 && channel(a, x: x, y: y, 1) > 225 && channel(a, x: x, y: y, 2) > 225
@@ -70,6 +72,33 @@ import UniformTypeIdentifiers
         let exposedContrast = abs(channel(a, x: 198, 0) - channel(a, x: 202, 0))
         #expect(exposedContrast > 60)
         #expect(fineContrast < exposedContrast * 0.3)
+    }
+    @Test func brightPhotoKeepsDarkContrastAtWhiteTextEdges() throws {
+        let context = try #require(CGContext(data: nil, width: 1200, height: 800, bitsPerComponent: 8,
+            bytesPerRow: 4800, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 1200, height: 800))
+        let bytes = try render(#require(context.makeImage()))
+        try export(bytes, name: "white-photo-contrast")
+        var edgePixels = 0, readableEdges = 0
+        // Countdown glyph edges, away from the panel border and controls.
+        // White foreground must have a nearby dark contour; counting white
+        // pixels alone would falsely pass white text on this bright photo.
+        for y in 300..<390 {
+            for x in 450..<750 {
+                guard channel(bytes, x: x, y: y, 0) >= 245 else { continue }
+                let adjacent = [-1, 1].map { channel(bytes, x: x + $0, y: y, 0) }
+                guard adjacent.min()! < 240 else { continue }
+                edgePixels += 1
+                let darkest = (-3...3).flatMap { dy in
+                    (-3...3).map { dx in channel(bytes, x: x + dx, y: y + dy, 0) }
+                }.min()!
+                // sRGB 140 against white exceeds 3:1 at the glyph boundary.
+                if darkest < 140 { readableEdges += 1 }
+            }
+        }
+        #expect(edgePixels > 100)
+        #expect(Double(readableEdges) / Double(max(1, edgePixels)) > 0.85)
     }
     @Test func lowStimulationRemovesPhotoFromPanel() throws {
         let a = try render(fixture(), lowStimulation: true)

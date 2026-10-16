@@ -92,6 +92,9 @@ struct BreakInfoPanel<Actions: View>: View {
             actions()
         }
         .foregroundStyle(.white)
+        // A tight foreground halo keeps white glyphs readable on bright photos,
+        // including inline emergency content, without obscuring the photo panel.
+        .shadow(color: .black.opacity(0.95), radius: 1, x: 0, y: 1)
         .padding(28)
         .frame(maxWidth: 440)
         .background {

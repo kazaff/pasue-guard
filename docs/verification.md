@@ -92,5 +92,7 @@ Bundle smoke checks passed: ./dist/PauseGuard.app
 - 根因：原面板只依赖 `.regularMaterial` 的隐式采样，并覆盖 22% 黑色。运行中用户观察为不透照片的灰卡；离屏红/蓝条纹夹具也在面板内得到零色差。改为将同一张不可变背景图按同一屏幕逻辑点尺寸、`scaledToFill` 裁切和面板在场景内的位置对齐，再局部模糊 14 点，仅在面板内叠加 16% 黑色保障文字对比。没有修改模板合成、整屏亮度或控件行为。
 - macOS 26 使用公开 `.glassEffect(.clear, in:)` 为完整面板背景添加原生玻璃；macOS 14/15 使用同一照片模糊层与细描边。原生效果仅包围背景面，文字独立绘制：将文字放入原生效果子树会使 `ImageRenderer` 导出丢失文字，新增像素回归先以 0 个明亮前景像素失败，再修复为独立前景。辅助功能“减少透明度”使用不透明底色并禁用原生玻璃；“减少视觉刺激”从背景与局部模糊层同时移除照片。
 - 四项真实 CGImage 像素测试覆盖交换红/蓝低频色域后的面板响应、细条纹对比消退、非居中面板与非等比例画布的裁切对齐、低刺激隐藏照片、不透明辅助功能面板，以及文字仍可见。原有预览比例测试改用局部亮度边界测量，继续检查逻辑屏幕尺寸加倍时完整面板占比减半。
-- 最终全量 `bash Scripts/test.sh`：133 个报告项、19 suites，无失败，包含原有 HEIC 编码器显式跳过 1 项。RED/GREEN、release 与签名暂存包检查的命令和时间见 `.build/glass-backdrop/implementation.md`。暂存包位于 `.build/glass-backdrop/staged/PauseGuard.app`；本轮未覆盖运行中 `dist`、未启动覆盖窗口、未变更登录项。
+- 最终全量 `bash Scripts/test.sh`：134 个报告项、19 suites，无失败，包含原有 HEIC 编码器显式跳过 1 项。RED/GREEN、release 与签名暂存包检查的命令和时间见 `.build/glass-backdrop/implementation.md`。暂存包位于 `.build/glass-backdrop/staged/PauseGuard.app`；本轮未覆盖运行中 `dist`、未启动覆盖窗口、未变更登录项。
 - `.build/glass-backdrop/previews/striped-{red-blue,blue-red}.png` 是人工图像夹具的离屏输出，证明照片颜色、空间关系、局部模糊和独立文字绘制，**不证明原生 Liquid Glass 的实时折射、高光或实际桌面效果**。真实照片上的可读性、macOS 14/15 实机、macOS 26 原生玻璃、辅助功能开关、多屏、滚动及紧急解除仍待人工验收。
+
+独立复审发现极亮照片上的白字对比不足，补充 1 点深色前景细阴影，覆盖同一面板内的倒计时、文案与内联紧急解除控件，保持照片层 16% 局部压暗不变。纯白照片回归先以 0% 字形边缘具有足够深色轮廓失败；修复后要求超过 85% 的白字边缘在 3 像素范围内具有 sRGB 小于 140 的轮廓（对白色超过 3:1）。最终离屏纯白照片 PNG 已目视检查，最终全量为 134 个报告项、19 suites，无失败，包含 1 项原有 HEIC 跳过；原生实时玻璃效果仍待人工验收。
