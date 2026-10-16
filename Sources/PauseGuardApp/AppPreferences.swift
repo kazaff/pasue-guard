@@ -3,10 +3,20 @@ import Darwin
 
 public struct AppPreferences: Codable, Equatable, Sendable {
     public var onboardingComplete = false
+    public var loginAtLaunch = false
     public var singleImage = false
     public var reduceVisualStimulation = false
     public var customMessages: [String] = []
     public init() {}
+    private enum CodingKeys: String, CodingKey { case onboardingComplete, loginAtLaunch, singleImage, reduceVisualStimulation, customMessages }
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        onboardingComplete = try values.decodeIfPresent(Bool.self, forKey: .onboardingComplete) ?? false
+        loginAtLaunch = try values.decodeIfPresent(Bool.self, forKey: .loginAtLaunch) ?? false
+        singleImage = try values.decodeIfPresent(Bool.self, forKey: .singleImage) ?? false
+        reduceVisualStimulation = try values.decodeIfPresent(Bool.self, forKey: .reduceVisualStimulation) ?? false
+        customMessages = try values.decodeIfPresent([String].self, forKey: .customMessages) ?? []
+    }
     public func validated() -> Self {
         var copy = self
         copy.customMessages = customMessages.map { String($0.trimmingCharacters(in: .whitespacesAndNewlines).prefix(300)) }.filter { !$0.isEmpty }

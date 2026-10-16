@@ -16,6 +16,7 @@ import PauseGuardPlatform
     @Published public var error: String?
     public let isDemo: Bool
     private let preferencesStore: PreferencesStore
+    private let setLoginEnabled: (Bool) throws -> Void
     private let covers: BreakWindowController
     private var subscriptions = Set<AnyCancellable>()
     private var screensObserver: NSObjectProtocol?
@@ -27,7 +28,9 @@ import PauseGuardPlatform
         self.init(demo: demo, directory: nil, controller: nil, covers: BreakWindowController(), observeScreens: true)
     }
     init(demo: Bool = false, directory injectedDirectory: URL?, controller injectedController: AppController?,
-         covers: BreakWindowController, observeScreens: Bool = false) {
+         covers: BreakWindowController, observeScreens: Bool = false,
+         setLoginEnabled: @escaping (Bool) throws -> Void = { try LoginItemManager().setEnabled($0, appURL: Bundle.main.bundleURL) }) {
+        self.setLoginEnabled = setLoginEnabled
         self.covers = covers
         isDemo = demo
         let directory = injectedDirectory ?? (demo ? FileManager.default.temporaryDirectory.appendingPathComponent("PauseGuard-demo-" + UUID().uuidString) : StateStore.defaultDirectory)
@@ -86,6 +89,21 @@ import PauseGuardPlatform
         guard editingAllowed else { return }
         preferences = preferences.validated()
         do { try preferencesStore.save(preferences); prepareBackground() } catch { self.error = error.localizedDescription }
+    }
+    public func setLoginAtLaunch(_ enabled: Bool) {
+        guard editingAllowed, !isDemo else { return }
+        let old = preferences.loginAtLaunch
+        do {
+            try setLoginEnabled(enabled)
+            preferences.loginAtLaunch = enabled
+            do { try preferencesStore.save(preferences) }
+            catch {
+                preferences.loginAtLaunch = old
+                try? setLoginEnabled(old)
+                throw error
+            }
+            error = nil
+        } catch { self.error = error.localizedDescription }
     }
     public func start() { preferences.onboardingComplete = true; savePreferences(); controller.send(.start) }
     public func shutdown() { failureRecovery?.cancel(); failureRecovery = nil; covers.dismiss(); background.invalidate(); controller.shutdown() }

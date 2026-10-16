@@ -15,6 +15,15 @@ import PauseGuardCore
         #expect(timing.breakDurationSeconds == 3600)
         #expect(timing.preBreakWarningSeconds == 60)
     }
+    @Test func oldPreferencesKeepExistingValuesAndDefaultLoginOff() throws {
+        let data = Data("{\"onboardingComplete\":true,\"singleImage\":true,\"reduceVisualStimulation\":true,\"customMessages\":[\"rest\"]}".utf8)
+        let value = try JSONDecoder().decode(AppPreferences.self, from: data)
+        #expect(value.onboardingComplete)
+        #expect(value.singleImage)
+        #expect(value.reduceVisualStimulation)
+        #expect(value.customMessages == ["rest"])
+        #expect(!value.loginAtLaunch)
+    }
     @Test func realStorageAndFutureVersionPreservation() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

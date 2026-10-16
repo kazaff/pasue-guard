@@ -20,6 +20,34 @@ import PauseGuardPlatform
                    onEvent: @escaping (EngineEvent) -> Void) throws -> any BreakCover { fatalError("No displays") }
 }
 @Suite @MainActor struct DesktopModelIntegrationTests {
+    @Test func loginConsentPersistsOnlyAfterSuccessAndDemoNeverInstalls() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let controller = AppController(store: StateStore(directory: directory), idleSeconds: { 0 }, systemEvents: AvailableDesktop(), startTimer: false)
+        var shouldFail = true
+        var calls = 0
+        let model = DesktopModel(directory: directory, controller: controller,
+            covers: BreakWindowController(backend: MissingDisplaysBackend(), observeScreens: false),
+            setLoginEnabled: { _ in calls += 1; if shouldFail { throw CocoaError(.executableLoad) } })
+        defer { model.shutdown() }
+        #expect(!model.preferences.loginAtLaunch)
+        #expect(calls == 0)
+        model.setLoginAtLaunch(true)
+        #expect(!model.preferences.loginAtLaunch)
+        #expect(!PreferencesStore(directory: directory).load().loginAtLaunch)
+        #expect(model.error != nil)
+        shouldFail = false
+        model.setLoginAtLaunch(true)
+        #expect(model.preferences.loginAtLaunch)
+        #expect(PreferencesStore(directory: directory).load().loginAtLaunch)
+        #expect(model.error == nil)
+        let demo = DesktopModel(demo: true, directory: directory.appendingPathComponent("demo"), controller: controller,
+            covers: BreakWindowController(backend: MissingDisplaysBackend(), observeScreens: false),
+            setLoginEnabled: { _ in calls += 100 })
+        demo.setLoginAtLaunch(true)
+        #expect(!demo.preferences.loginAtLaunch)
+        #expect(calls == 2)
+    }
     @Test func presentationFailureAfterRuntimePublicationPersistsPausedStateOnce() async {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
