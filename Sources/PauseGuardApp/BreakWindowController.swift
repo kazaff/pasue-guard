@@ -17,14 +17,19 @@ import PauseGuardPlatform
 @MainActor protocol BreakPresentationBackend: AnyObject {
     var displays: [DisplayDescriptor] { get }
     func begin()
+    func setStrictMode(_ strict: Bool)
     func end()
     func makeCover(display: DisplayDescriptor, runtime: RuntimeState,
                    onEvent: @escaping (EngineEvent) -> Void) throws -> any BreakCover
 }
 
+extension BreakPresentationBackend { func setStrictMode(_ strict: Bool) {} }
+
 /// Lifecycle owner in the main app only. Creating this object never creates windows.
 @MainActor public final class BreakWindowController {
     public var onFailure: ((Error) -> Void)?
+    public var message = "让目光看向远处，放松肩膀，起身活动。"
+    public var reduceVisualStimulation = false
     private let backend: any BreakPresentationBackend
     private var covers: [UInt32: any BreakCover] = [:]
     private var descriptors: [DisplayDescriptor] = []
@@ -49,6 +54,7 @@ import PauseGuardPlatform
         }
         dismiss()
         self.runtime = runtime; self.background = background; self.onEvent = onEvent
+        backend.setStrictMode(runtime.cycleSettings.strictMode)
         backend.begin()
         do {
             try reconcile()
@@ -109,6 +115,7 @@ import PauseGuardPlatform
                 guard let self, self.generation == token else { return }
                 self.handle(event)
             }
+            (cover as? AppKitBreakCover)?.configure(message: message, reduceVisualStimulation: reduceVisualStimulation)
             covers[descriptor.id] = cover
             let image = background.image(for: descriptor) { [weak self, weak cover] image in
                 guard let self, self.generation == token,
@@ -127,16 +134,21 @@ import PauseGuardPlatform
     }
 }
 
-@MainActor private final class AppKitBreakBackend: BreakPresentationBackend {
+@MainActor final class AppKitBreakBackend: BreakPresentationBackend {
     private var previousOptions: NSApplication.PresentationOptions?
+    private var strict = false
+    func setStrictMode(_ strict: Bool) { self.strict = strict }
     var displays: [DisplayDescriptor] { DisplayTopology.current() }
     func begin() {
         guard previousOptions == nil else { return }
         previousOptions = NSApp.presentationOptions
-        // Public best effort only: no disableForceQuit, disableSessionTermination,
-        // disableProcessSwitching, event taps, keyboard interception or kiosk lock.
-        NSApp.presentationOptions = [.autoHideDock, .autoHideMenuBar]
+        // Public process-switch restriction discourages Cmd-Tab in strict mode.
+        // Force Quit and session termination remain enabled; no input hooks.
+        NSApp.presentationOptions = Self.options(strict: strict)
         NSApp.activate(ignoringOtherApps: true)
+    }
+    static func options(strict: Bool) -> NSApplication.PresentationOptions {
+        strict ? [.autoHideDock, .autoHideMenuBar, .disableProcessSwitching] : [.autoHideDock, .autoHideMenuBar]
     }
     func end() {
         if let previousOptions { NSApp.presentationOptions = previousOptions }
@@ -173,6 +185,7 @@ private final class CoverWindow: NSWindow {
         window.setFrame(screen.frame, display: true)
         window.makeKeyAndOrderFront(nil)
     }
+    func configure(message: String, reduceVisualStimulation: Bool) { model.message = message; model.reduceVisualStimulation = reduceVisualStimulation }
     func update(runtime: RuntimeState) { model.runtime = runtime }
     func setBackground(_ image: CGImage?) { model.image = image }
     func release() { window.orderOut(nil); window.close() }

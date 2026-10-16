@@ -67,3 +67,31 @@ fallback, no animations, VoiceOver labels, non-strict end action, and a separate
 inline emergency confirmation before release/pause. Real Spaces, full screen,
 Mission Control, Retina, hot plug, VoiceOver, keyboard-only use, system shortcuts,
 sleep/lock and emergency confirmation remain explicit manual acceptance work.
+
+## Desktop lifecycle (Task 6)
+
+`DesktopModel` owns coordinator, cover controller and image provider. It subscribes
+using the published new runtime, only shows an available break, and uses a weak
+coordinator callback. A show failure is handled only by `onFailure`. Shutdown first
+releases covers and invalidates background work. Menu quit and AppKit normal
+termination both consult `requestQuit`; final termination always calls shutdown.
+
+Strict AppKit covers now temporarily add the public `.disableProcessSwitching`
+presentation option alongside auto-hide Dock/menu bar. This discourages ordinary
+Cmd-Tab app switching and keeps keyboard focus in the activated cover application.
+Non-strict presentation does not add that option. Neither mode disables Force Quit
+or session termination, uses a global input hook, or claims kiosk isolation. Every
+dismissal and failure restores the exact previous presentation options. Real
+Mission Control, Spaces, full screen, keyboard focus, VoiceOver, Force Quit and
+emergency-release interaction remain manual acceptance checks on real hardware.
+
+The UI stores version-1 `preferences.json` alongside the existing timer settings,
+including onboarding completion, single/multiple images, reduced visual stimulation
+and normalized custom messages. A message is chosen once per break cycle and shared
+across all displays. With no custom lines, a built-in message is selected. Reduced
+visual stimulation hides photos; the interface has no animations and also honors
+system reduced transparency. Theme layout names and random template are editable.
+All image/library mutation uses provider actor APIs. Preparation runs once when a
+new work cycle is published, after a work-time topology change, and after work-time
+library/preferences edits. It never runs on every timer tick. Provider revisions
+reject stale renders; UI snapshot revisions reject stale library reads.

@@ -4,6 +4,8 @@ import PauseGuardCore
 @MainActor final class BreakViewModel: ObservableObject {
     @Published var runtime: RuntimeState
     @Published var image: CGImage?
+    @Published var message = "让目光看向远处，放松肩膀，起身活动。"
+    @Published var reduceVisualStimulation = false
     init(runtime: RuntimeState) { self.runtime = runtime }
 }
 
@@ -21,7 +23,7 @@ struct BreakView: View {
         GeometryReader { geometry in
             ZStack {
                 Color(red: 0.035, green: 0.05, blue: 0.08)
-                if let image = model.image, !reduceTransparency {
+                if let image = model.image, !reduceTransparency, !model.reduceVisualStimulation {
                     Image(decorative: image, scale: 1).resizable().scaledToFill()
                         .frame(width: geometry.size.width, height: geometry.size.height).clipped()
                     Color.black.opacity(0.35)
@@ -33,7 +35,7 @@ struct BreakView: View {
                             .font(.system(size: min(100, max(44, geometry.size.width * 0.12)), weight: .medium, design: .rounded))
                             .monospacedDigit()
                             .accessibilityLabel("剩余休息时间 \(countdown)")
-                        Text("让目光看向远处，放松肩膀，起身活动。").font(.title3)
+                        Text(model.message).font(.title3)
                             .multilineTextAlignment(.center)
                         if !model.runtime.cycleSettings.strictMode {
                             Button("结束本次休息") { onEvent(.endBreak) }
