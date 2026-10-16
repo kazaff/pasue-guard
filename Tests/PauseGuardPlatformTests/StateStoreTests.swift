@@ -17,6 +17,37 @@ func session(phase: RuntimePhase = .breaking) -> PersistedSession {
 }
 
 struct StateStoreTests {
+    @Test func testMissingPausedPhaseJSONIsRejected() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var saved = session(phase: .paused)
+        saved.runtime.pausedPhase = nil
+        let bytes = try JSONEncoder().encode(saved)
+        let object = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let runtime = try #require(object["runtime"] as? [String: Any])
+        #expect(runtime["pausedPhase"] == nil)
+        try bytes.write(to: directory.appendingPathComponent("session.json"))
+        #expect(StateStore(directory: directory).loadSession() == nil)
+    }
+    @Test func testValidPausedPhasesRoundTripAndResume() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = StateStore(directory: directory)
+        for phase: RuntimePhase in [.working, .preparing, .breaking] {
+            var saved = session(phase: .paused)
+            saved.runtime.pausedPhase = phase
+            try store.saveSession(saved)
+            let loaded = try #require(store.loadSession())
+            let restored = RecoveryPolicy.restore(loaded, now: saved.clock)
+            #expect(restored.phase == .paused)
+            #expect(restored.pausedPhase == phase)
+            var engine = TimerEngine(restoring: restored, settings: UserSettings(), at: 1000)
+            engine.handle(.resume, at: 1000)
+            #expect(engine.state.phase == phase)
+            #expect(engine.state.breakRemainingSeconds == 200)
+        }
+    }
+
     @Test func testAtomicRoundTrip() throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

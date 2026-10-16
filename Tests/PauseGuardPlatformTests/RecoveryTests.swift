@@ -4,6 +4,35 @@ import PauseGuardCore
 @testable import PauseGuardPlatform
 
 struct RecoveryTests {
+    @Test func testExpiredBreakUsesCurrentSettingsForNextWork() {
+        let settings = UserSettings(workDurationSeconds: 600, breakDurationSeconds: 120, timerMode: .active, strictMode: false, preBreakWarningSeconds: 30)
+        let now = ClockSnapshot(continuousUptime: 2000, bootID: "boot-a", wallDate: Date())
+        let restored = RecoveryPolicy.restore(session(), now: now, currentSettings: settings)
+        #expect(restored.phase == .working)
+        #expect(restored.workRemainingSeconds == 600)
+        #expect(restored.breakRemainingSeconds == 120)
+        #expect(restored.cycleSettings == settings)
+    }
+    @Test func testCurrentSettingsDoNotChangeOngoingBreakSnapshot() {
+        let settings = UserSettings(workDurationSeconds: 600, breakDurationSeconds: 60, strictMode: false)
+        let now = ClockSnapshot(continuousUptime: 1050, bootID: "boot-a", wallDate: Date())
+        let restored = RecoveryPolicy.restore(session(), now: now, currentSettings: settings)
+        #expect(restored.phase == .breaking)
+        #expect(restored.breakRemainingSeconds == 150)
+        #expect(restored.cycleSettings.breakDurationSeconds == 300)
+        #expect(restored.cycleSettings.strictMode)
+    }
+
+    @Test func testMissingPausedPhaseCannotRestoreOrResumeAsWork() {
+        var saved = session(phase: .paused)
+        saved.runtime.pausedPhase = nil
+        let restored = RecoveryPolicy.restore(saved, now: saved.clock)
+        #expect(restored.phase == .stopped)
+        var engine = TimerEngine(restoring: saved.runtime, settings: UserSettings(), at: 1000)
+        engine.handle(.resume, at: 1000)
+        #expect(engine.state.phase == .stopped)
+    }
+
     @Test func testSameBootRecoveryUsesContinuousTime() {
         let restored = RecoveryPolicy.restore(session(), now: ClockSnapshot(continuousUptime: 1050, bootID: "boot-a", wallDate: .distantPast))
         #expect(restored.phase == .breaking)

@@ -37,13 +37,13 @@ extension RuntimeState {
     /// Reject malformed persisted state before it can drive enforcement or arithmetic.
     public var isValidForRestore: Bool {
         let settings = cycleSettings
+        let validPausedPhase = pausedPhase.map { [.working, .preparing, .breaking].contains($0) } ?? false
         return settings == settings.validated() &&
             workRemainingSeconds.isFinite && (0...settings.workDurationSeconds).contains(workRemainingSeconds) &&
             breakRemainingSeconds.isFinite && (0...settings.breakDurationSeconds).contains(breakRemainingSeconds) &&
             cycleNumber >= 0 && cycleNumber < Int.max &&
             awayElapsedSeconds.isFinite && awayElapsedSeconds >= 0 &&
             (awayStartedAt.map { $0.isFinite && $0 >= 0 } ?? true) &&
-            (pausedPhase == nil || [.working, .preparing, .breaking].contains(pausedPhase!)) &&
-            (phase == .paused || pausedPhase == nil)
+            (phase == .paused ? validPausedPhase : pausedPhase == nil)
     }
 }

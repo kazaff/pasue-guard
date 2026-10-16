@@ -2,7 +2,7 @@ import Foundation
 import PauseGuardCore
 
 public enum RecoveryPolicy {
-    public static func restore(_ session: PersistedSession, now: ClockSnapshot) -> RuntimeState {
+    public static func restore(_ session: PersistedSession, now: ClockSnapshot, currentSettings: UserSettings? = nil) -> RuntimeState {
         guard session.isValid, now.isValid, session.desiredRunning else { return RuntimeState() }
         var state = session.runtime
         let sameBoot = session.clock.bootID == now.bootID && now.continuousUptime >= session.clock.continuousUptime
@@ -20,6 +20,7 @@ public enum RecoveryPolicy {
             state.breakRemainingSeconds = max(0, state.breakRemainingSeconds - elapsed)
             if state.breakRemainingSeconds == 0, state.isAvailable {
                 state.phase = .working
+                state.cycleSettings = (currentSettings ?? state.cycleSettings).validated()
                 state.workRemainingSeconds = state.cycleSettings.workDurationSeconds
                 state.breakRemainingSeconds = state.cycleSettings.breakDurationSeconds
                 state.cycleNumber += 1
