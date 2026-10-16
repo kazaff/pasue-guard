@@ -14,9 +14,13 @@ import PauseGuardPlatform
     @Published public private(set) var themes: [BreakTheme] = []
     @Published public private(set) var busy = false
     @Published public var error: String?
+    @Published public private(set) var loginItemInstalled = false
+    @Published public private(set) var loginCleanupRequired = false
+    @Published public private(set) var loginCleanupPaths: [String] = []
     public let isDemo: Bool
     private let preferencesStore: PreferencesStore
     private let setLoginEnabled: (Bool) throws -> Void
+    private let readLoginItemPaths: () -> [String]
     private let covers: BreakWindowController
     private var subscriptions = Set<AnyCancellable>()
     private var screensObserver: NSObjectProtocol?
@@ -29,8 +33,10 @@ import PauseGuardPlatform
     }
     init(demo: Bool = false, directory injectedDirectory: URL?, controller injectedController: AppController?,
          covers: BreakWindowController, observeScreens: Bool = false,
-         setLoginEnabled: @escaping (Bool) throws -> Void = { try LoginItemManager().setEnabled($0, appURL: Bundle.main.bundleURL) }) {
+         setLoginEnabled: @escaping (Bool) throws -> Void = { try LoginItemManager().setEnabled($0, appURL: Bundle.main.bundleURL) },
+         loginItemPaths: @escaping () -> [String] = { LoginItemManager().remainingPaths }) {
         self.setLoginEnabled = setLoginEnabled
+        self.readLoginItemPaths = loginItemPaths
         self.covers = covers
         isDemo = demo
         let directory = injectedDirectory ?? (demo ? FileManager.default.temporaryDirectory.appendingPathComponent("PauseGuard-demo-" + UUID().uuidString) : StateStore.defaultDirectory)
@@ -48,6 +54,11 @@ import PauseGuardPlatform
                 return now
             }, idleSeconds: { 0 })
         } else { controller = AppController(store: store) }
+        if !demo {
+            loginCleanupPaths = loginItemPaths()
+            loginItemInstalled = !loginCleanupPaths.isEmpty
+            loginCleanupRequired = loginItemInstalled && (!preferences.loginAtLaunch || loginCleanupPaths.count != 2)
+        }
         covers.onFailure = { [weak self] error in
             guard let self, self.failureRecovery == nil else { return }
             // @Published emits in willSet. Recover after the outer engine send
@@ -92,19 +103,48 @@ import PauseGuardPlatform
     }
     public func setLoginAtLaunch(_ enabled: Bool) {
         guard editingAllowed, !isDemo else { return }
-        let old = preferences.loginAtLaunch
-        do {
-            try setLoginEnabled(enabled)
-            preferences.loginAtLaunch = enabled
-            do { try preferencesStore.save(preferences) }
-            catch {
-                preferences.loginAtLaunch = old
-                try? setLoginEnabled(old)
-                throw error
-            }
+        let oldPreference = preferences.loginAtLaunch
+        let oldInstalled = loginItemInstalled
+        do { try setLoginEnabled(enabled) }
+        catch {
+            refreshLoginStatus()
+            loginCleanupRequired = loginItemInstalled
+            self.error = error.localizedDescription
+            return
+        }
+        loginItemInstalled = enabled
+        loginCleanupPaths = readLoginItemPaths()
+        preferences.loginAtLaunch = enabled
+        // Cleanup of an already-disabled preference must not reinstall jobs just
+        // because unrelated preference storage is still unavailable.
+        if enabled == oldPreference {
+            loginCleanupRequired = false
             error = nil
-        } catch { self.error = error.localizedDescription }
+            return
+        }
+        do {
+            try preferencesStore.save(preferences)
+            loginCleanupRequired = false
+            error = nil
+        } catch let saveError {
+            preferences.loginAtLaunch = oldPreference
+            do {
+                try setLoginEnabled(oldInstalled)
+                refreshLoginStatus()
+                loginCleanupRequired = loginItemInstalled && !oldPreference
+                error = saveError.localizedDescription
+            } catch let rollbackError {
+                refreshLoginStatus()
+                loginCleanupRequired = true
+                error = "保存登录设置失败：" + saveError.localizedDescription + "\n回滚登录组件失败：" + rollbackError.localizedDescription
+            }
+        }
     }
+    private func refreshLoginStatus() {
+        loginCleanupPaths = readLoginItemPaths()
+        loginItemInstalled = !loginCleanupPaths.isEmpty
+    }
+    public func retryLoginCleanup() { setLoginAtLaunch(false) }
     public func start() { preferences.onboardingComplete = true; savePreferences(); controller.send(.start) }
     public func shutdown() { failureRecovery?.cancel(); failureRecovery = nil; covers.dismiss(); background.invalidate(); controller.shutdown() }
     public func prepareBackground() {

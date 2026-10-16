@@ -1,17 +1,32 @@
 import Foundation
 import Darwin
 
+public struct LoginItemOperationError: LocalizedError, Sendable {
+    public let operationError: String
+    public let cleanupErrors: [String]
+    public let remainingPaths: [String]
+    public var errorDescription: String? {
+        ([operationError] + cleanupErrors + (remainingPaths.isEmpty ? [] : ["仍需移除的登录组件：" + remainingPaths.joined(separator: "、")])).joined(separator: "\n")
+    }
+}
+
 public struct LoginItemManager {
     public static let label = "com.pauseguard.agent"
     public let homeDirectory: URL
     private let runLaunchctl: ([String]) throws -> Void
+    private let removeFile: (URL) throws -> Void
     public init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
-                runLaunchctl: @escaping ([String]) throws -> Void = LoginItemManager.launchctl) {
+                runLaunchctl: @escaping ([String]) throws -> Void = LoginItemManager.launchctl,
+                removeFile: @escaping (URL) throws -> Void = { try FileManager.default.removeItem(at: $0) }) {
         self.homeDirectory = homeDirectory
         self.runLaunchctl = runLaunchctl
+        self.removeFile = removeFile
     }
     public var plistURL: URL { homeDirectory.appendingPathComponent("Library/LaunchAgents/\(Self.label).plist") }
     public var loginPlistURL: URL { homeDirectory.appendingPathComponent("Library/LaunchAgents/com.pauseguard.login.plist") }
+    public var remainingPaths: [String] {
+        [plistURL, loginPlistURL].filter { (try? FileManager.default.attributesOfItem(atPath: $0.path)) != nil }.map(\.path)
+    }
     public func plistData(appURL: URL, loginStarter: Bool = false) throws -> Data {
         guard appURL.isFileURL, appURL.pathExtension == "app", appURL.path.hasPrefix("/"),
               !appURL.path.contains("\n") else { throw CocoaError(.fileReadInvalidFileName) }
@@ -47,17 +62,19 @@ public struct LoginItemManager {
             } catch {
                 // Preserve any job whose rollback fails so users can retry disabling it.
                 var retained = Set<String>()
+                var cleanupErrors: [String] = []
                 for label in loaded.reversed() {
                     do { try runLaunchctl(["bootout", domain + "/" + label]) }
-                    catch { retained.insert(label) }
+                    catch { retained.insert(label); cleanupErrors.append(error.localizedDescription) }
                 }
                 for url in written where !retained.contains(url.deletingPathExtension().lastPathComponent) {
-                    try? FileManager.default.removeItem(at: url)
+                    do { try removeFile(url) }
+                    catch { cleanupErrors.append(url.path + ": " + error.localizedDescription) }
                 }
-                throw error
+                throw LoginItemOperationError(operationError: error.localizedDescription, cleanupErrors: cleanupErrors, remainingPaths: remainingPaths)
             }
         } else {
-            var firstError: (any Error)?
+            var errors: [String] = []
             for (label, url) in jobs where FileManager.default.fileExists(atPath: url.path) {
                 do {
                     do { try runLaunchctl(["bootout", domain + "/" + label]) }
@@ -66,10 +83,10 @@ public struct LoginItemManager {
                         let ns = error as NSError
                         guard ns.domain == "PauseGuard.LoginItem", ns.code == 3 else { throw error }
                     }
-                    try FileManager.default.removeItem(at: url)
-                } catch { if firstError == nil { firstError = error } }
+                    try removeFile(url)
+                } catch { errors.append(url.path + ": " + error.localizedDescription) }
             }
-            if let firstError { throw firstError }
+            if let first = errors.first { throw LoginItemOperationError(operationError: first, cleanupErrors: Array(errors.dropFirst()), remainingPaths: remainingPaths) }
         }
     }
 

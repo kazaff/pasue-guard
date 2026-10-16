@@ -51,6 +51,37 @@ struct LoginItemTests {
         #expect(calls.last?.first == "bootout")
         #expect(calls.last?.last?.hasSuffix("/com.pauseguard.agent") == true)
     }
+    @Test func testRollbackFileRemovalFailureReportsRemainingPathsAndCanRetry() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let app = home.appendingPathComponent("Test.app")
+        let executable = app.appendingPathComponent("Contents/MacOS/PauseGuardAgent")
+        try FileManager.default.createDirectory(at: executable.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: executable)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+        var denyCleanup = true
+        let manager = LoginItemManager(homeDirectory: home, runLaunchctl: { arguments in
+            if arguments.first == "bootstrap", arguments.last?.hasSuffix("com.pauseguard.login.plist") == true {
+                throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "bootstrap-denied"])
+            }
+        }, removeFile: { url in
+            if denyCleanup { throw NSError(domain: "test", code: 2, userInfo: [NSLocalizedDescriptionKey: "remove-denied"]) }
+            try FileManager.default.removeItem(at: url)
+        })
+        do {
+            try manager.setEnabled(true, appURL: app)
+            Issue.record("Expected bootstrap failure")
+        } catch {
+            #expect(error.localizedDescription.contains("bootstrap-denied"))
+            #expect(error.localizedDescription.contains("remove-denied"))
+            #expect(error.localizedDescription.contains(manager.plistURL.path))
+            #expect(error.localizedDescription.contains(manager.loginPlistURL.path))
+        }
+        #expect(manager.remainingPaths.count == 2)
+        denyCleanup = false
+        try manager.setEnabled(false, appURL: app)
+        #expect(manager.remainingPaths.isEmpty)
+    }
     @Test func testUnloadedOneShotJobCanStillBeRemoved() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: home) }

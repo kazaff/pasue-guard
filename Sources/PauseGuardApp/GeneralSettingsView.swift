@@ -7,8 +7,13 @@ struct GeneralSettingsView: View {
             Toggle("降低视觉刺激", isOn: Binding(get: { model.preferences.reduceVisualStimulation }, set: { model.preferences.reduceVisualStimulation = $0; model.savePreferences() }))
             Text("休息页使用纯深色背景。界面默认不使用动画，并遵循系统的降低透明度设置。").font(.callout).foregroundStyle(.secondary)
             Divider()
-            Toggle("登录时启动", isOn: Binding(get: { model.preferences.loginAtLaunch }, set: { model.setLoginAtLaunch($0) })).disabled(model.isDemo)
+            Toggle("登录时启动", isOn: Binding(get: { model.loginItemInstalled }, set: { model.setLoginAtLaunch($0) })).disabled(model.isDemo)
             Text("开启后安装当前用户的登录启动和守护组件。下次登录打开应用；当前会话主动退出后不会重启。演示模式不可开启。").font(.callout).foregroundStyle(.secondary)
+            if model.loginCleanupRequired {
+                Text("登录组件尚未清理完成。开关显示本机组件状态；可重试移除后重新开启。").font(.callout).foregroundStyle(.orange)
+                ForEach(model.loginCleanupPaths, id: \.self) { Text($0).font(.caption).textSelection(.enabled) }
+                Button("重试移除登录组件") { model.retryLoginCleanup() }.disabled(model.isDemo)
+            }
             Divider()
             Label("照片和配置只保存在本机", systemImage: "internaldrive")
             Text("无需账户、网络或辅助功能权限。聚合空闲时长仅用于计时，不记录键盘内容。").font(.callout).foregroundStyle(.secondary)
