@@ -244,4 +244,42 @@ struct TimerEngineTests {
         #expect(decoded.awayStartedAt == 10)
         #expect(decoded.sleeping)
     }
+
+    // Non-tick events must not reuse an old below-threshold idle value and
+    // charge work that the next tick correctly identifies as idle.
+    @Test func testActiveIdleAccountingIgnoresInterleavedNonTickEvents() {
+        let settings = UserSettings(timerMode: .active)
+        let streams: [[(EngineEvent, TimeInterval)]] = [
+            [],
+            [(.availabilityChanged(sleeping: false, locked: false), 120)],
+            [(.updateSettings(settings), 120)],
+            [(.resume, 120)],
+            [(.availabilityChanged(sleeping: false, locked: false), 90),
+             (.updateSettings(settings), 100), (.resume, 110),
+             (.availabilityChanged(sleeping: false, locked: false), 120)]
+        ]
+        for stream in streams {
+            var engine = TimerEngine(settings: settings)
+            engine.handle(.start, at: 0)
+            engine.handle(.tick(idleSeconds: 60), at: 60)
+            for (event, uptime) in stream {
+                engine.handle(event, at: uptime)
+                #expect(engine.state.workRemainingSeconds == 2640)
+            }
+            engine.handle(.tick(idleSeconds: 120), at: 120)
+            #expect(engine.state.workRemainingSeconds == 2640)
+        }
+    }
+
+    @Test func testNonTickEventAgesIdleSampleAcrossThreshold() {
+        var engine = TimerEngine(settings: UserSettings(timerMode: .active))
+        engine.handle(.start, at: 0)
+        engine.handle(.tick(idleSeconds: 30), at: 30)
+        engine.handle(.availabilityChanged(sleeping: false, locked: false), at: 90)
+        #expect(engine.state.workRemainingSeconds == 2640)
+        engine.handle(.tick(idleSeconds: 90), at: 90)
+        #expect(engine.state.workRemainingSeconds == 2640)
+        engine.handle(.tick(idleSeconds: 0), at: 100)
+        #expect(engine.state.workRemainingSeconds == 2630)
+    }
 }

@@ -16,6 +16,7 @@ public struct TimerEngine: Sendable {
     private var settings: UserSettings
     private var lastUptime: TimeInterval?
     private var lastIdleSeconds: TimeInterval = 0
+    private var lastIdleSampleUptime: TimeInterval?
 
     public init(settings: UserSettings) {
         self.settings = settings.validated()
@@ -29,8 +30,13 @@ public struct TimerEngine: Sendable {
         lastUptime = uptime
         if case .tick(let idle) = event {
             lastIdleSeconds = idle.isFinite ? max(0, idle) : .infinity
+            lastIdleSampleUptime = uptime
         }
-        advance(by: delta, at: uptime)
+        if lastIdleSampleUptime == nil { lastIdleSampleUptime = uptime }
+        // Availability/settings/user events contain no new activity evidence.
+        // Age the last sample so their arrival cannot credit additional idle work.
+        let idleSeconds = lastIdleSeconds + (uptime - (lastIdleSampleUptime ?? uptime))
+        advance(by: delta, at: uptime, idleSeconds: idleSeconds)
         switch event {
         case .start:
             guard state.phase == .stopped else { return }
@@ -69,7 +75,7 @@ public struct TimerEngine: Sendable {
 
     private var isWorking: Bool { state.phase == .working || state.phase == .preparing }
 
-    private mutating func advance(by delta: TimeInterval, at uptime: TimeInterval) {
+    private mutating func advance(by delta: TimeInterval, at uptime: TimeInterval, idleSeconds: TimeInterval) {
         if !state.isAvailable, let awayStart = state.awayStartedAt {
             state.awayElapsedSeconds = uptime - awayStart
         }
@@ -79,7 +85,7 @@ public struct TimerEngine: Sendable {
             if state.cycleSettings.timerMode == .active {
                 // Only the interval before the idle threshold is credited. This
                 // also handles sparse ticks crossing the 60-second boundary.
-                counted = max(0, delta - max(0, lastIdleSeconds - UserSettings.idleThresholdSeconds))
+                counted = max(0, delta - max(0, idleSeconds - UserSettings.idleThresholdSeconds))
             } else {
                 counted = delta
             }
