@@ -1,0 +1,62 @@
+# PauseGuard
+
+macOS 菜单栏休息应用：工作计时到期后显示休息覆盖、倒计时和本地图片背景；休息结束后进入下一工作周期。支持固定时间与有效工作时间、严格/非严格休息、图集和紧急解除。
+
+当前为本地 MVP 候选版本。自动测试及应用包校验已执行；真实桌面交互验收仍待完成，详见 [验收清单](docs/acceptance.md) 和 [验证记录](docs/verification.md)。
+
+## 构建与运行
+
+需要 macOS、Swift 6.3.2 工具链（本机使用 Command Line Tools）。包声明最低 macOS 14；实际构建测试环境为 macOS 26.5.2、Apple Silicon。当前输出为 arm64、ad hoc 本地签名，未提供 Developer ID 签名或公证。
+
+在仓库根目录运行：
+
+```sh
+bash Scripts/test.sh
+bash Scripts/build-app.sh
+bash Scripts/check-app.sh
+open dist/PauseGuard.app
+```
+
+也可使用本机绝对路径：
+
+```sh
+bash ./Scripts/build-app.sh
+open ./dist/PauseGuard.app
+```
+
+构建脚本执行 release 构建，打包主程序、独立 Agent 和两个 LaunchAgent plist，并校验本地签名。测试脚本为 CLT 的 Swift Testing 配置框架路径；无需完整 Xcode。测试不安装登录项、不启动真实覆盖窗口、不改变睡眠或锁屏状态。
+
+首次打开后，从菜单栏进入配置：设置工作时长（5～180 分钟）、休息时长（1～60 分钟）、计时模式、严格模式和背景，然后明确启用循环。默认 45 分钟工作、5 分钟休息。开机启动初始关闭，需主动启用。工作时可提前休息、暂停/继续或退出。当前工作时长、当前休息时长和严格程度使用各阶段快照；修改分别从下一个工作/休息阶段生效。
+
+开发演示使用独立临时数据和加速时钟（约 20 秒工作、4 秒休息），仍会显示真实覆盖，应在可中断的桌面操作中运行：
+
+```sh
+open -n dist/PauseGuard.app --args --demo
+```
+
+## 背景与本地数据
+
+在“休息背景”批量导入 PNG、JPEG、HEIC，选择单图或拼贴；在“主题图集”管理名称、启用状态和素材集合。支持 Hero、Grid、Collage、Cinematic、Minimal 和随机模板。HEIC 真实文件解码尚待验证。图片复制到内部库，源文件可保留在原位置；合成失败使用默认背景，不等待合成才进入休息。
+
+数据目录为 `~/Library/Application Support/PauseGuard/`：`settings.json` 保存计时配置，`preferences.json` 保存界面偏好，`session.json` 保存运行快照，`Images/` 保存素材、缩略图与 `library.json`，`events.log` 保存有界事件日志，`agent-history.json` 保存恢复限速记录。损坏状态不会直接恢复覆盖；配置/状态在显式替换保存时保留 `.preserved-*` 诊断副本。数据和图片仅在本机使用，不需账号。
+
+## 开机启动与 Agent
+
+设置中的开机启动开关会安装或移除当前用户的两个任务：`com.pauseguard.login` 在登录时打开应用，`com.pauseguard.agent` 检查异常消失并有限恢复。正常退出保存停止意图，当前会话中不会由守护程序重新拉起。系统注销/重启则保留未完成快照和恢复意图，下一次打开时继续（真实系统事件投递仍待验收）。Agent 最多在五分钟内尝试三次；它不拥有覆盖窗口。
+
+需要手动管理时，在已登录用户下执行（无需 sudo；先构建并保持应用路径稳定）：
+
+```sh
+bash Scripts/install-agent.sh ./dist/PauseGuard.app
+bash Scripts/uninstall-agent.sh ./dist/PauseGuard.app
+```
+
+脚本会实际修改 `~/Library/LaunchAgents/com.pauseguard.agent.plist` 和 `~/Library/LaunchAgents/com.pauseguard.login.plist` 并调用用户会话 launchctl。此轮验证没有执行安装/移除或登录重启实验。应用移位或删除前先关闭开机启动/移除两个任务；若设置显示清理失败，按所示路径处理并重试清理。
+
+## 紧急恢复
+
+休息界面选择“紧急解除…”并确认后，所有覆盖释放，循环保存为暂停；恢复循环需要明确继续。非严格模式也可选择“结束本次休息”，立即开始下一工作周期。严格休息期间普通暂停、退出和提前结束不可用。
+
+若界面失去响应，使用 macOS 的强制退出结束 PauseGuard，主进程结束即释放其窗口；系统安全快捷键不被拦截。若已启用 Agent，异常退出可能触发有限重新打开；移除上述登录任务后再正常退出可停止守护。需重置时，先停用 Agent 并退出应用，再备份整个数据目录，将 `session.json` 移到目录之外后重开，可清除当前循环快照而保留设置和图片。
+
+覆盖对 Space、Mission Control、全屏应用和辅助功能的实际效果依赖 macOS。当前不能承诺无法绕过，也尚未完成真实紧急解除、VoiceOver、多屏及登录恢复验收。

@@ -107,7 +107,7 @@ import PauseGuardPlatform
     }
 
     /// Normal menu/window quit must consult this gate before terminating.
-    /// applicationWillTerminate still calls shutdown for forced/system exits.
+    /// System session termination uses shutdown(preservingSession: true).
     @discardableResult public func requestQuit() -> Bool {
         guard !terminated else { return true }
         send(.tick(idleSeconds: idleSeconds()))
@@ -116,11 +116,11 @@ import PauseGuardPlatform
         return true
     }
 
-    /// Called by applicationWillTerminate. Save the stopped intent before
-    /// removing observers/timers, so the supervisor cannot restart a user quit.
-    public func shutdown() {
+    /// Explicit quit clears intent; logout/restart preserves the unfinished phase.
+    /// The first shutdown wins, so later delegate cleanup cannot overwrite intent.
+    public func shutdown(preservingSession: Bool = false) {
         guard !terminated else { return }
-        desiredRunning = false
+        if !preservingSession { desiredRunning = false }
         persist(at: clock())
         terminated = true
         timer?.invalidate()

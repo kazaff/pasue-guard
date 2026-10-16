@@ -1,15 +1,35 @@
 import AppKit
+import CoreServices
 import SwiftUI
 import PauseGuardApp
 
 @MainActor final class ApplicationDelegate: NSObject, NSApplicationDelegate {
     weak var model: DesktopModel?
+    private var sessionEnding = false
+    private var powerOffObserver: NSObjectProtocol?
+    override init() {
+        super.init()
+        powerOffObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willPowerOffNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.sessionEnding = true
+            }
+        }
+    }
+    isolated deinit {
+        if let powerOffObserver { NSWorkspace.shared.notificationCenter.removeObserver(powerOffObserver) }
+    }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let model else { return .terminateNow }
-        guard model.controller.requestQuit() else { return .terminateCancel }
-        model.shutdown(); return .terminateNow
+        // Quit Apple events carry a reason during logout/restart, before the
+        // workspace notification may arrive. Ordinary menu quits have no reason.
+        let reason = NSAppleEventManager.shared().currentAppleEvent?
+            .paramDescriptor(forKeyword: AEKeyword(kAEQuitReason))?.enumCodeValue
+        let systemQuit = reason.map { [OSType(kAEQuitAll), OSType(kAEShutDown), OSType(kAERestart), OSType(kAEReallyLogOut)].contains($0) } ?? false
+        return model.requestTermination(systemSessionEnding: sessionEnding || systemQuit) ? .terminateNow : .terminateCancel
     }
-    func applicationWillTerminate(_ notification: Notification) { model?.shutdown() }
+    func applicationWillTerminate(_ notification: Notification) { model?.shutdown(preservingSession: true) }
     func applicationDidFinishLaunching(_ notification: Notification) { NSApp.setActivationPolicy(.accessory) }
 }
 @main struct PauseGuardApplication: App {

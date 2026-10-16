@@ -146,7 +146,17 @@ import PauseGuardPlatform
     }
     public func retryLoginCleanup() { setLoginAtLaunch(false) }
     public func start() { preferences.onboardingComplete = true; savePreferences(); controller.send(.start) }
-    public func shutdown() { failureRecovery?.cancel(); failureRecovery = nil; covers.dismiss(); background.invalidate(); controller.shutdown() }
+    /// The OS must be able to end its session even during a strict break.
+    public func requestTermination(systemSessionEnding: Bool) -> Bool {
+        if !systemSessionEnding, !controller.requestQuit() { return false }
+        shutdown(preservingSession: systemSessionEnding)
+        return true
+    }
+    public func shutdown(preservingSession: Bool = false) {
+        failureRecovery?.cancel(); failureRecovery = nil
+        covers.dismiss(); background.invalidate()
+        controller.shutdown(preservingSession: preservingSession)
+    }
     public func prepareBackground() {
         guard [.working, .preparing].contains(controller.runtime.phase) else { return }
         background.prepare(for: DisplayTopology.current(), singleImage: preferences.singleImage)
