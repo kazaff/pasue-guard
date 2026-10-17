@@ -23,6 +23,7 @@ import PauseGuardCore
         #expect(value.reduceVisualStimulation)
         #expect(value.customMessages == ["rest"])
         #expect(!value.loginAtLaunch)
+        #expect(value.emergencyReleasePhrase.isEmpty)
     }
     @Test func realStorageAndFutureVersionPreservation() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -30,8 +31,10 @@ import PauseGuardCore
         let store = PreferencesStore(directory: root)
         var value = AppPreferences(); value.onboardingComplete = true; value.singleImage = true
         value.customMessages = ["  hello "]
+        value.emergencyReleasePhrase = "别偷懒，继续休息！"
         try store.save(value)
         #expect(store.load() == value.validated())
+        #expect(store.load().emergencyReleasePhrase == "别偷懒，继续休息！")
         let file = root.appendingPathComponent("preferences.json")
         try Data("{\"schemaVersion\":999}".utf8).write(to: file)
         #expect(store.load() == AppPreferences())

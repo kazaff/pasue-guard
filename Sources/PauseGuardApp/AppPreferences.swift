@@ -7,9 +7,10 @@ public struct AppPreferences: Codable, Equatable, Sendable {
     public var singleImage = false
     public var videoFileName: String?
     public var reduceVisualStimulation = false
+    public var emergencyReleasePhrase = ""
     public var customMessages: [String] = []
     public init() {}
-    private enum CodingKeys: String, CodingKey { case onboardingComplete, loginAtLaunch, singleImage, reduceVisualStimulation, customMessages, videoFileName }
+    private enum CodingKeys: String, CodingKey { case onboardingComplete, loginAtLaunch, singleImage, reduceVisualStimulation, customMessages, videoFileName, emergencyReleasePhrase }
     public init(from decoder: any Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         onboardingComplete = try values.decodeIfPresent(Bool.self, forKey: .onboardingComplete) ?? false
@@ -17,6 +18,7 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         singleImage = try values.decodeIfPresent(Bool.self, forKey: .singleImage) ?? false
         reduceVisualStimulation = try values.decodeIfPresent(Bool.self, forKey: .reduceVisualStimulation) ?? false
         videoFileName = try values.decodeIfPresent(String.self, forKey: .videoFileName)
+        emergencyReleasePhrase = try values.decodeIfPresent(String.self, forKey: .emergencyReleasePhrase) ?? ""
         customMessages = try values.decodeIfPresent([String].self, forKey: .customMessages) ?? []
     }
     public func validated() -> Self {

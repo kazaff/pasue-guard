@@ -56,7 +56,15 @@ public struct SettingsView: View {
     private var enforcement: some View {
         VStack(alignment: .leading, spacing: 18) {
             Toggle("严格模式", isOn: binding(\.strictMode))
-            Text("严格休息中无法提前结束、暂停或正常退出。所有显示器显示倒计时；紧急解除需等待 5 秒并输入 4 位验证码，完成后释放覆盖并暂停循环。")
+            Text("严格休息中无法提前结束、暂停或正常退出。所有显示器显示倒计时；紧急解除需等待 5 秒并完成输入验证，完成后释放覆盖并暂停循环。")
+            TextField("咒骂语（可选）", text: Binding(get: { model.preferences.emergencyReleasePhrase }, set: {
+                guard model.editingAllowed else { return }
+                model.preferences.emergencyReleasePhrase = $0
+                model.savePreferences()
+            }))
+            .textFieldStyle(.roundedBorder)
+            Text("设置后，紧急解除时必须手动输入这句话，含标点和空格完全一致才可解除；不支持粘贴。留空则沿用 4 位验证码流程。")
+                .font(.callout).foregroundStyle(.secondary)
             Text("系统强制退出、会话和辅助功能操作保持可用。覆盖与前台激活为尽力执行，无法保证隔离其他应用或系统界面。")
                 .font(.callout).foregroundStyle(.secondary)
         }

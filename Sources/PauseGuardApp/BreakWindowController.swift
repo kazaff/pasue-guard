@@ -34,6 +34,7 @@ extension BreakPresentationBackend { func setStrictMode(_ strict: Bool) {} }
     public var message = "让目光看向远处，放松肩膀，起身活动。"
     public var reduceVisualStimulation = false
     public var videoURL: URL?
+    public var emergencyReleasePhrase = ""
     private let backend: any BreakPresentationBackend
     private var covers: [UInt32: any BreakCover] = [:]
     private var coverTokens: [UInt32: UUID] = [:]
@@ -125,7 +126,7 @@ extension BreakPresentationBackend { func setStrictMode(_ strict: Bool) {} }
                       self.coverTokens[descriptor.id] == coverToken else { return }
                 self.handle(event)
             }
-            (cover as? AppKitBreakCover)?.configure(message: message, reduceVisualStimulation: reduceVisualStimulation, videoURL: videoURL)
+            (cover as? AppKitBreakCover)?.configure(message: message, reduceVisualStimulation: reduceVisualStimulation, videoURL: videoURL, emergencyReleasePhrase: emergencyReleasePhrase)
             covers[descriptor.id] = cover
             let image = background.image(for: descriptor) { [weak self, weak cover] image in
                 guard let self, self.generation == token,
@@ -196,7 +197,7 @@ private final class CoverWindow: NSWindow {
         window.setFrame(screen.frame, display: true)
         window.makeKeyAndOrderFront(nil)
     }
-    func configure(message: String, reduceVisualStimulation: Bool, videoURL: URL?) { model.message = message; model.reduceVisualStimulation = reduceVisualStimulation; model.videoURL = videoURL }
+    func configure(message: String, reduceVisualStimulation: Bool, videoURL: URL?, emergencyReleasePhrase: String) { model.message = message; model.reduceVisualStimulation = reduceVisualStimulation; model.videoURL = videoURL; model.emergencyReleasePhrase = emergencyReleasePhrase }
     func update(runtime: RuntimeState) { model.runtime = runtime }
     func setBackground(_ image: CGImage?) { model.image = image }
     func release() { model.videoURL = nil; window.orderOut(nil); window.close() }

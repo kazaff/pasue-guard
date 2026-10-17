@@ -5,6 +5,7 @@ import PauseGuardCore
     @Published var runtime: RuntimeState
     @Published var image: CGImage?
     @Published var videoURL: URL?
+    @Published var emergencyReleasePhrase = ""
     @Published var exiting = false
     @Published var message = "让目光看向远处，放松肩膀，起身活动。"
     @Published var reduceVisualStimulation = false
@@ -41,11 +42,13 @@ struct BreakView: View {
                         // Inline confirmation remains inside the cover's window level.
                         // A standard sheet could end up below another screen's cover.
                         if confirmingEmergency {
-                            EmergencyReleaseView(onCancel: { confirmingEmergency = false }, onConfirm: { onEvent(.emergencyRelease) })
+                            EmergencyReleaseView(phrase: model.emergencyReleasePhrase, onCancel: { confirmingEmergency = false }, onConfirm: { onEvent(.emergencyRelease) })
                         } else {
                             Button("紧急解除…") { confirmingEmergency = true }
                                 .buttonStyle(.bordered).controlSize(.large)
-                                .accessibilityHint("先等待五秒，再输入四位验证码并确认。解除所有覆盖并暂停循环。")
+                                .accessibilityHint(model.emergencyReleasePhrase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    ? "先等待五秒，再输入四位验证码并确认。解除所有覆盖并暂停循环。"
+                                    : "手动输入设置中的咒骂语，等待五秒后确认。解除所有覆盖并暂停循环。")
                         }
                     }
                     .padding(.horizontal, max(16, geometry.safeAreaInsets.leading + 16))

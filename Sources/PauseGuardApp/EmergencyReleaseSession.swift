@@ -4,15 +4,17 @@ import Combine
 /// One attempt, owned by one inline confirmation view.
 @MainActor final class EmergencyReleaseSession: ObservableObject {
     let challenge: String
+    let usesCustomPhrase: Bool
     @Published var input = ""
     private let now: () -> ContinuousClock.Instant
     private let startedAt: ContinuousClock.Instant
     private var active = true
 
-    init(now: @escaping () -> ContinuousClock.Instant = { ContinuousClock.now }) {
+    init(phrase: String = "", now: @escaping () -> ContinuousClock.Instant = { ContinuousClock.now }) {
         self.now = now
         startedAt = now()
-        challenge = String(format: "%04d", Int.random(in: 0...9999))
+        usesCustomPhrase = !phrase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        challenge = usesCustomPhrase ? phrase : String(format: "%04d", Int.random(in: 0...9999))
     }
 
     private var elapsed: Duration { startedAt.duration(to: now()) }

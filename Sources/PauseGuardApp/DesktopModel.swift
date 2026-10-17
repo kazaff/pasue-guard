@@ -89,6 +89,7 @@ import PauseGuardPlatform
             if messageCycle != runtime.cycleNumber {
                 messageCycle = runtime.cycleNumber
                 covers.message = preferences.randomMessage()
+                covers.emergencyReleasePhrase = preferences.emergencyReleasePhrase
                 covers.reduceVisualStimulation = preferences.reduceVisualStimulation
                 covers.videoURL = preferences.reduceVisualStimulation ? nil : videoLibrary.url(for: preferences.videoFileName)
             }

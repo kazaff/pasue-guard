@@ -3,9 +3,14 @@ import SwiftUI
 struct EmergencyReleaseView: View {
     let onCancel: () -> Void
     let onConfirm: () -> Void
-    @StateObject private var session = EmergencyReleaseSession()
+    @StateObject private var session: EmergencyReleaseSession
     @AccessibilityFocusState private var confirmationFocused: Bool
     @FocusState private var codeFocused: Bool
+    init(phrase: String = "", onCancel: @escaping () -> Void, onConfirm: @escaping () -> Void) {
+        self.onCancel = onCancel
+        self.onConfirm = onConfirm
+        _session = StateObject(wrappedValue: EmergencyReleaseSession(phrase: phrase))
+    }
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.2)) { _ in
             let remaining = session.remainingSeconds
@@ -14,10 +19,20 @@ struct EmergencyReleaseView: View {
                     .accessibilityFocused($confirmationFocused)
                 Text("解除后所有屏幕恢复使用，保护循环将暂停，需要你手动恢复。")
                     .multilineTextAlignment(.center)
+                if session.usesCustomPhrase {
+                    Text("请手动输入下方咒骂语，含标点和空格需完全一致。")
+                        .multilineTextAlignment(.center)
+                    Text(session.challenge).font(.title3.bold())
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.disabled)
+                    ManualEntryField(text: $session.input)
+                        .frame(maxWidth: 420).frame(height: 28)
+                }
                 if remaining > 0 {
                     Text("请先停一停，\(remaining) 秒后可验证解除。")
                         .monospacedDigit()
-                } else {
+                } else if !session.usesCustomPhrase {
                     Text("输入下方 4 位数字，再确认解除。")
                     Text(session.challenge).font(.title.monospaced()).tracking(6)
                         .textSelection(.disabled)
@@ -27,6 +42,8 @@ struct EmergencyReleaseView: View {
                         .focused($codeFocused)
                         .accessibilityLabel("输入显示的 4 位验证码")
                         .accessibilityHint("完全一致后可以确认解除。")
+                }
+                if session.usesCustomPhrase || remaining == 0 {
                     Button("解除并暂停保护") {
                         // Recheck at action time, even if a stale enabled button fires.
                         if session.confirm() { onConfirm() }
@@ -41,7 +58,7 @@ struct EmergencyReleaseView: View {
             .padding(16)
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.7)))
             .onChange(of: remaining == 0) { _, ready in
-                if ready { codeFocused = true }
+                if ready && !session.usesCustomPhrase { codeFocused = true }
             }
         }
         .onAppear { confirmationFocused = true }
