@@ -6,7 +6,7 @@ macOS 菜单栏休息应用：工作计时到期后显示休息覆盖、倒计�
 
 ## 构建与运行
 
-需要 macOS、Swift 6.3.2 工具链（本机使用 Command Line Tools）。包声明最低 macOS 14；实际构建测试环境为 macOS 26.5.2、Apple Silicon。当前输出为 arm64、ad hoc 本地签名，未提供 Developer ID 签名或公证。
+需要 macOS、Swift 6.3.2 工具链（本机使用 Command Line Tools）。包声明最低 macOS 14；实际构建测试环境为 macOS 26.5.2、Apple Silicon。当前输出仅支持 Apple Silicon（arm64），使用 ad hoc 本地签名，未提供 Developer ID 签名或公证。分发范围与安装步骤见 [发布说明](docs/release.md)。
 
 在仓库根目录运行：
 
@@ -17,7 +17,7 @@ bash Scripts/check-app.sh
 open dist/PauseGuard.app
 ```
 
-构建脚本执行 release 构建，打包主程序、独立 Agent 和两个 LaunchAgent plist，并校验本地签名。测试脚本为 CLT 的 Swift Testing 配置框架路径；无需完整 Xcode。测试不安装登录项、不启动真实覆盖窗口、不改变睡眠或锁屏状态。
+构建脚本执行 release 构建，打包主程序与独立 Agent，清理调试信息中的本机路径，并检查包内隐私信息和本地签名。开机启动的两个 LaunchAgent plist 在用户主动开启后，按接收者实际安装路径生成，不随包分发。测试脚本为 CLT 的 Swift Testing 配置框架路径；无需完整 Xcode。测试不安装登录项、不启动真实覆盖窗口、不改变睡眠或锁屏状态。
 
 首次打开后，从菜单栏进入配置：设置工作时长（5～180 分钟）、休息时长（1～60 分钟）、计时模式、严格模式和背景，然后明确启用循环。默认 45 分钟工作、5 分钟休息。开机启动初始关闭，需主动启用。工作时可提前休息、暂停/继续或退出。当前工作时长、当前休息时长和严格程度使用各阶段快照；修改分别从下一个工作/休息阶段生效。
 
@@ -44,8 +44,8 @@ open -n dist/PauseGuard.app --args --demo
 需要手动管理时，在已登录用户下执行（无需 sudo；先构建并保持应用路径稳定）：
 
 ```sh
-bash Scripts/install-agent.sh ./dist/PauseGuard.app
-bash Scripts/uninstall-agent.sh ./dist/PauseGuard.app
+bash Scripts/install-agent.sh "$PWD/dist/PauseGuard.app"
+bash Scripts/uninstall-agent.sh "$PWD/dist/PauseGuard.app"
 ```
 
 脚本会实际修改 `~/Library/LaunchAgents/com.pauseguard.agent.plist` 和 `~/Library/LaunchAgents/com.pauseguard.login.plist` 并调用用户会话 launchctl。此轮验证没有执行安装/移除或登录重启实验。应用移位或删除前先关闭开机启动/移除两个任务；若设置显示清理失败，按所示路径处理并重试清理。
