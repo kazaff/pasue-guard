@@ -17,13 +17,6 @@ bash Scripts/check-app.sh
 open dist/PauseGuard.app
 ```
 
-也可使用本机绝对路径：
-
-```sh
-bash ./Scripts/build-app.sh
-open ./dist/PauseGuard.app
-```
-
 构建脚本执行 release 构建，打包主程序、独立 Agent 和两个 LaunchAgent plist，并校验本地签名。测试脚本为 CLT 的 Swift Testing 配置框架路径；无需完整 Xcode。测试不安装登录项、不启动真实覆盖窗口、不改变睡眠或锁屏状态。
 
 首次打开后，从菜单栏进入配置：设置工作时长（5～180 分钟）、休息时长（1～60 分钟）、计时模式、严格模式和背景，然后明确启用循环。默认 45 分钟工作、5 分钟休息。开机启动初始关闭，需主动启用。工作时可提前休息、暂停/继续或退出。当前工作时长、当前休息时长和严格程度使用各阶段快照；修改分别从下一个工作/休息阶段生效。

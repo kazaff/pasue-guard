@@ -7,7 +7,7 @@
 - macOS 26.5.2（25F84），arm64。
 - Apple Swift 6.3.2，swift-driver 1.148.6，Command Line Tools；Swift Testing 1902。
 - Package.swift 与 Info.plist 声明 macOS 14；未在 macOS 14、Intel 或其他系统版本运行。
-- 仓库：`.`。
+- 以下命令均以仓库根目录为当前目录。
 
 在仓库根目录执行：
 
