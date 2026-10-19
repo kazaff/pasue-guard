@@ -23,6 +23,7 @@ import PauseGuardPlatform
     private let readLoginItemPaths: () -> [String]
     private let covers: BreakWindowController
     private let warning: PreBreakWarningController?
+    private let pausedReminder: PausedProtectionReminderController?
     private var subscriptions = Set<AnyCancellable>()
     private var screensObserver: NSObjectProtocol?
     private var preparedCycle: Int?
@@ -40,6 +41,7 @@ import PauseGuardPlatform
         self.readLoginItemPaths = loginItemPaths
         self.covers = covers
         warning = observeScreens ? PreBreakWarningController() : nil
+        pausedReminder = observeScreens ? PausedProtectionReminderController() : nil
         isDemo = demo
         let directory = injectedDirectory ?? (demo ? FileManager.default.temporaryDirectory.appendingPathComponent("PauseGuard-demo-" + UUID().uuidString) : StateStore.defaultDirectory)
         let store = StateStore(directory: directory)
@@ -84,6 +86,9 @@ import PauseGuardPlatform
         objectWillChange.send()
         warning?.update(runtime, baseDuration: controller.settings.breakDurationSeconds) { [weak controller] in
             controller?.send(.skipUpcomingBreak)
+        }
+        pausedReminder?.update(runtime, phrase: preferences.emergencyReleasePhrase) { [weak controller] in
+            controller?.send(.resume)
         }
         if runtime.phase == .breaking && runtime.isAvailable {
             if messageCycle != runtime.cycleNumber {
@@ -192,6 +197,7 @@ import PauseGuardPlatform
     public func shutdown(preservingSession: Bool = false) {
         failureRecovery?.cancel(); failureRecovery = nil
         warning?.dismiss()
+        pausedReminder?.dismiss()
         covers.dismiss(); background.invalidate()
         controller.shutdown(preservingSession: preservingSession)
     }
